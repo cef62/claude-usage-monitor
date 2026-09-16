@@ -25,3 +25,4 @@ coverage/
 test-results/
 
 # History drafts are committed; nothing to ignore there
+.superpowers/
