@@ -9,8 +9,9 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status (2026-09-16):** repo initialized, no code yet. Next step is a brainstorming session
-(`superpowers:brainstorming`) to settle scope and design before any scaffolding.
+**Status (2026-09-16):** v1 design approved, see
+`docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`. Next step: implementation plan
+(`superpowers:writing-plans`), then scaffolding on a feature branch.
 
 ## Reference Material (read before writing code)
 
@@ -53,10 +54,11 @@ src/                       React frontend (Vite root)
 src-tauri/
   Cargo.toml, tauri.conf.json, build.rs
   capabilities/default.json
-  src/main.rs              Tauri builder, tray, window wiring only
+  src/main.rs              Tauri builder, managed state, commands
   src/lib.rs               modules live here so integration tests can import them
   src/usage.rs             credentials + HTTP + normalization
   src/poll.rs              poll loop, backoff, cooldown state machine
+  src/tray.rs              tray icon, menu, title text, popover positioning
   icons/
 test/                      Vitest specs for src/lib
 ```
