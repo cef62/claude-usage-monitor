@@ -1,6 +1,6 @@
 # Claude Usage Monitor v1 — Design
 
-Date: 2026-09-16. Status: approved in brainstorming, awaiting implementation plan.
+Date: 2026-09-16. Status: approved. Plan: `docs/superpowers/plans/2026-09-16-usage-monitor-v1.md`.
 
 ## Goal
 
@@ -119,9 +119,12 @@ enum Status {
     NoToken,
     AuthExpired,
     RateLimited { until: i64 },
-    Error(String),   // short, user-readable; never contains the token
+    Error { message: String },   // short, user-readable; never contains the token
 }
 ```
+
+`Status` serializes internally tagged (`{"kind": "ok"}`, `{"kind": "rate_limited", "until": …}`,
+`{"kind": "error", "message": …}`) so the TypeScript side can switch on `kind`.
 
 ### Poll loop (`poll.rs`)
 
@@ -142,14 +145,14 @@ Cycle:
    - `RateLimited { retry_after }` → `error_count += 1`; delay = `retry_after` clamped to
      `[180, 900]` if present, else `min(180 * 2^(error_count - 1), 900)`. Status
      `RateLimited { until: now + delay }`.
-   - `Server` / `Network` → `error_count += 1`, `Status::Error(msg)`, delay 30s.
+   - `Server` / `Network` → `error_count += 1`, `Status::Error { message }`, delay 30s.
 5. Set `next_poll_at = now + delay`, emit `usage`, refresh tray title, sleep.
 
 `next_delay(outcome, error_count, retry_after, nearest_reset, now) -> u64` is a pure function
 with a table test. Clock-jump guard: if `now < last_success`, treat cooldown as satisfied.
 
-A second lightweight timer (60s) re-renders the tray title from the cached snapshot so the
-countdown ticks without network traffic.
+The poll thread sleeps in 60s slices and re-renders the tray title (and re-emits the snapshot)
+after each slice, so the countdown ticks without network traffic and without a second thread.
 
 ## Tray and popover (`tray.rs`, `main.rs`, `tauri.conf.json`)
 
@@ -178,8 +181,9 @@ countdown ticks without network traffic.
 
 ### macOS presence
 
-`bundle.macOS.infoPlist` sets `LSUIElement = true`; `setup` calls
-`app.set_activation_policy(ActivationPolicy::Accessory)`.
+`src-tauri/Info.plist` (merged by Tauri) sets `LSUIElement = true`; `setup` calls
+`app.set_activation_policy(ActivationPolicy::Accessory)`. `app.macOSPrivateApi` is `true`
+because a transparent window on macOS requires it.
 
 ### Commands (`main.rs`, all `Result<_, String>`)
 
@@ -192,8 +196,9 @@ External links go through `plugin:opener|open_url`, invoked directly from `src/l
 
 ### Capabilities (`capabilities/default.json`, window `popover`)
 
-`core:default`, `core:window:allow-hide`, `core:window:allow-set-size`,
-`core:event:allow-listen`, and `opener:allow-open-url` with `allow: [{ "url": "https://claude.ai/*" }]`.
+`core:default` (covers event listening) and `opener:allow-open-url` with
+`allow: [{ "url": "https://claude.ai/*" }]`. Hide, resize and quit are app commands, which need
+no capability entry.
 
 ## React popover
 
@@ -264,6 +269,9 @@ Network and Keychain paths are exercised manually with `pnpm tauri dev`.
   `test`, `test:run`, `verify`.
 - `tauri.conf.json`: identifier `com.matteo.claude-usage-monitor`, product name
   `Claude Usage Monitor`, bundle targets `app`, `dmg`, `nsis`, `minimumSystemVersion: "12.0"`,
-  CSP `default-src 'self'`. Template icons until replaced.
-- `Cargo.toml`: `tauri` with `tray-icon` feature, `tauri-plugin-opener`, `reqwest` (blocking,
-  rustls-tls-native-roots, json), `serde`, `serde_json`. Release profile per CLAUDE.md.
+  CSP `default-src 'self'; style-src 'self' 'unsafe-inline'` (bar widths are inline styles).
+  Generated placeholder icons until replaced.
+- `Cargo.toml`: `tauri` with `tray-icon` and `image-png` features, `tauri-plugin-opener`,
+  `reqwest` 0.12 (blocking, rustls-tls-native-roots, json), `serde`, `serde_json`. Release
+  profile per CLAUDE.md. Timestamps are parsed by a small hand-written ISO-8601 function; no
+  `chrono`.
