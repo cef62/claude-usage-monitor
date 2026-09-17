@@ -9,6 +9,16 @@ pub const WEEKLY_LEVELS: [u8; 1] = [95];
 /// At or above this level the title shows `⚠` and time-aware suppression no longer applies.
 pub const MARKER_LEVEL: u8 = 95;
 const PRUNE_AFTER_SECS: i64 = 86_400;
+/// `resets_at` jitters sub-second between polls (docs/research-usage-monitors.md); anything
+/// within a minute is the same reset window.
+const SAME_WINDOW_SECS: i64 = 60;
+
+fn already_fired(state: &AlertState, key: &str, resets_at: i64, level: u8) -> bool {
+    state
+        .fired
+        .iter()
+        .any(|(k, r, l)| k == key && *l == level && (r - resets_at).abs() <= SAME_WINDOW_SECS)
+}
 
 /// Levels already announced, keyed by (quota key, reset window, level). In-memory only.
 #[derive(Default)]
@@ -79,7 +89,7 @@ pub fn evaluate(
             .copied()
             .filter(|&level| q.percent >= f64::from(level))
             .filter(|&level| level >= MARKER_LEVEL || q.percent > elapsed)
-            .filter(|&level| !state.fired.contains(&(q.key.clone(), q.resets_at, level)))
+            .filter(|&level| !already_fired(state, &q.key, q.resets_at, level))
             .max();
         let Some(highest) = highest else {
             continue;
@@ -232,6 +242,20 @@ mod tests {
             .insert(("session".to_string(), NOW - 2 * 86400, 80));
         evaluate(&mut st, &[], &on(), NOW);
         assert!(st.fired.is_empty());
+    }
+
+    #[test]
+    fn jittered_resets_at_is_the_same_window() {
+        let mut st = AlertState::default();
+        assert_eq!(
+            evaluate(&mut st, &[session(96.0, 7200)], &on(), NOW).len(),
+            1
+        );
+        let jittered = Quota {
+            resets_at: NOW + 7201,
+            ..session(97.0, 7200)
+        };
+        assert!(evaluate(&mut st, &[jittered], &on(), NOW + 100).is_empty());
     }
 
     #[test]
