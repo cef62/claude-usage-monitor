@@ -9,7 +9,7 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1.1 (menu bar settings, ad-hoc signing) is on branch `feat/menu-bar-settings`.
+**Status:** v1.1 (menu bar settings, ad-hoc signing) implemented; released via the Changesets pipeline.
 Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 `docs/superpowers/specs/2026-09-17-ci-release-design.md`,
 `docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`.

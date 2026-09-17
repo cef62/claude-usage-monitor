@@ -37,7 +37,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Claude Usage Monitor ${{ github.ref_name }}"
-          releaseBody: "See CHANGELOG.md for details. The app is unsigned: right-click the .app and choose Open on first launch."
+          releaseBody: "See CHANGELOG.md for details. The app is ad-hoc signed, not notarized: on first launch open System Settings → Privacy & Security and click Open Anyway, or run `xattr -cr \"/Applications/Claude Usage Monitor.app\"` once."
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: false
