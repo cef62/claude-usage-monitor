@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Snapshot } from './quota';
-import { SESSION_SECS, WEEKLY_SECS } from './quota';
+import type { PopoverSettings, Snapshot } from './quota';
+import { DEFAULT_POPOVER_SETTINGS, SESSION_SECS, WEEKLY_SECS } from './quota';
 
 // Outside Tauri (plain `pnpm dev` in a browser) every call is backed by this fixture so the
 // UI can be iterated without the Rust shell.
@@ -46,6 +46,15 @@ export async function getSnapshot(): Promise<Snapshot> {
 export async function onUsage(cb: (s: Snapshot) => void): Promise<() => void> {
   if (!inTauri) return () => {};
   return listen<Snapshot>('usage', (event) => cb(event.payload));
+}
+
+export async function getSettings(): Promise<PopoverSettings> {
+  return inTauri ? invoke<PopoverSettings>('get_settings') : DEFAULT_POPOVER_SETTINGS;
+}
+
+export async function onSettings(cb: (s: PopoverSettings) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<PopoverSettings>('settings', (event) => cb(event.payload));
 }
 
 export async function hidePopover(): Promise<void> {
