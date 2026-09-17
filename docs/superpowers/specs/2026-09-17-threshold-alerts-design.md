@@ -93,7 +93,7 @@ existing `on_setting_toggled` handler; `MenuItems` holds all seven.
 
 - README: "Alerts" paragraph (levels, once per window, time-aware rule, how to turn off, first
   notification triggers the macOS permission prompt).
-- CLAUDE.md: layout gains `src/alerts.rs`; capabilities note lists `notification:default`.
+- CLAUDE.md: layout gains `src/alerts.rs`; Tauri Rules note that notifications need no capability entry.
 - Changeset `minor`.
 
 ## Testing
