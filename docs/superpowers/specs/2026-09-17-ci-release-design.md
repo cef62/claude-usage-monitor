@@ -16,7 +16,7 @@ and `.app.tar.gz` attached.
 | Versioning | Changesets, single private package, `privatePackages: { version: true, tag: true }` |
 | Version anchors | `package.json` is the source; `scripts/sync-version.mjs` copies it into `src-tauri/tauri.conf.json`; `Cargo.toml` stays `0.0.0` |
 | Starting version | Reset both anchors to `0.0.0` and add a `minor` changeset for v1, so the first release is `0.1.0` |
-| Release trigger | Merge of the Changesets "Version Packages" PR → `changeset tag` → tag push → build + GitHub Release |
+| Release trigger | Merge of the Changesets "Version Packages" PR → `changeset git-tag` → tag push → `gh workflow run build-release.yml` → build + GitHub Release |
 | macOS target | `aarch64-apple-darwin` only, on `macos-latest` |
 | CI scope | `pnpm verify` + `pnpm tauri build --bundles app` on every PR and push to `main` |
 | Signing | None (unsigned, as in v1) |
@@ -38,7 +38,7 @@ comments, branch protection rules.
 - `package.json` scripts:
   - `changeset`: `changeset`
   - `version-packages`: `changeset version && node scripts/sync-version.mjs`
-  - `release:tag`: `changeset tag`
+  - `release:tag`: `changeset git-tag`
 - `scripts/sync-version.mjs`: reads `package.json` `version`, writes it to
   `src-tauri/tauri.conf.json` `version`, preserving the file's 2-space formatting and trailing
   newline. Exits non-zero if either file is unreadable.
