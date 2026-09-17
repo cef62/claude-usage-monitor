@@ -11,8 +11,8 @@ Built with Tauri 2, Rust, React and TypeScript. No third-party UI libraries.
 The app reads the Claude Code OAuth token from the macOS Keychain (service
 `Claude Code-credentials`), calls `https://api.anthropic.com/api/oauth/usage` every 3 minutes,
 and shows the percentages the API reports. It never stores or logs the token. If you are not
-logged in to Claude Code, or the token has expired, the menu bar shows `⏱ ! login`; run
-`claude auth login` and the app recovers on its own.
+logged in to Claude Code the menu bar shows `⏱ —`; if the token has expired it shows
+`⏱ ! login`. In both cases run `claude auth login` and the app recovers on its own.
 
 Menu bar format: `⏱ 48% ↻2h13m · 📅 64% ↻3d4h` (session · weekly). ` (429)` after the text
 means the API is rate limiting us and the numbers may be a few minutes old.
