@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.3.0
+
+### Minor Changes
+
+- a157fb5: Threshold alerts: macOS notifications at 80% and 95% session usage and 95% weekly usage, once per reset window (80% only when usage is ahead of the clock), a `⚠` menu bar marker at 95%, and per-quota on/off under right-click → Alerts.
+
 ## 0.2.0
 
 ### Minor Changes
