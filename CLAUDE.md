@@ -135,8 +135,10 @@ pnpm changeset          # add a changeset for a user-visible change (required in
   `scripts/sync-version.mjs`, which mirrors the version into `src-tauri/tauri.conf.json`.
   `Cargo.toml` stays `0.0.0`; nothing reads `CARGO_PKG_VERSION`.
 - Workflows: `ci.yml` (verify + build on PRs and `main`), `release.yml` (Changesets action:
-  opens the Version Packages PR; on its merge runs `changeset tag`), `build-release.yml`
-  (`v*` tags: `tauri-action` builds `aarch64-apple-darwin` and publishes the GitHub Release).
+  opens the Version Packages PR; on its merge runs `changeset git-tag`, pushes the tag and
+  dispatches `build-release.yml`), `build-release.yml` (dispatched by `release.yml`, or any
+  manual `v*` tag push: `tauri-action` builds `aarch64-apple-darwin` and publishes the GitHub
+  Release).
 - Never edit versions by hand; never create tags by hand.
 
 ## Code Conventions

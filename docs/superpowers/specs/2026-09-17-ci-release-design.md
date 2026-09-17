@@ -65,23 +65,34 @@ comments, branch protection rules.
 
 - Trigger: `push` to `main`.
 - `concurrency`: group `release`, no cancel.
-- Permissions: `contents: write`, `pull-requests: write`.
+- Permissions: `contents: write`, `pull-requests: write`, `actions: write` (needed to dispatch
+  `build-release.yml`).
 - Job `version-or-tag` on `ubuntu-latest`: checkout (`fetch-depth: 0`), pnpm, Node 24,
-  `pnpm install --frozen-lockfile`, then `changesets/action@v1` with:
-  - `version: pnpm version-packages`
-  - `publish: pnpm release:tag`
-  - `createGithubReleases: false`
-  - `commit: "chore: version packages"`, `title: "chore: version packages"`
-  - `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}`
+  `pnpm install --frozen-lockfile`, then `changesets/action@v2` (id: `changesets`) with:
+  - `version-script: pnpm version-packages`
+  - `publish-script: pnpm release:tag`
+  - `create-github-releases: false`
+  - `commit-message: "chore: version packages"`, `pr-title: "chore: version packages"`
+  - `github-token` is left unset; v2 defaults it to `${{ github.token }}`.
 - Behavior: with pending changesets the action opens or updates the "Version Packages" PR
   (running `version-packages`, so both anchors bump and `CHANGELOG.md` is written). When that PR
-  is merged and no changesets remain, the action runs `changeset tag` and pushes the new tag.
+  is merged and no changesets remain, the action runs `changeset git-tag` (the `changeset tag`
+  alias is deprecated in cli 3) and pushes the new tag, setting `steps.changesets.outputs.published
+  == 'true'`.
+- A final step, gated on that output, runs
+  `gh workflow run build-release.yml --ref "v$(node -p "require('./package.json').version")"`
+  using `GH_TOKEN: ${{ github.token }}`.
+- **Why dispatch:** a tag pushed by an Actions job authenticated with `GITHUB_TOKEN` does not
+  trigger other workflows' `on: push` events (GitHub's loop-prevention rule), so `build-release.yml`
+  would never fire from the tag push alone. Dispatching it explicitly after the tag exists closes
+  that gap without a PAT or deploy key.
 
 ### `.github/workflows/build-release.yml`
 
-- Trigger: `push` of tags matching `v*`. `ponytail:` if `changeset tag` turns out to emit
-  `claude-usage-monitor@X.Y.Z` for this repo layout, add that pattern to the trigger and derive
-  the release name from the version suffix.
+- Triggers: `push` of tags matching `v*`, and `workflow_dispatch` (so `release.yml` can start
+  the build for a tag pushed with `GITHUB_TOKEN`, which does not fire `push` itself). `ponytail:`
+  if `changeset git-tag` turns out to emit `claude-usage-monitor@X.Y.Z` for this repo layout, add
+  that pattern to the trigger and derive the release name from the version suffix.
 - Permissions: `contents: write`.
 - Job `macos` on `macos-latest`: checkout, pnpm, Node 24, Rust stable with
   `aarch64-apple-darwin`, rust-cache, `pnpm install --frozen-lockfile`, then
