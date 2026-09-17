@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn rfc3339_formats_utc() {
         assert_eq!(rfc3339(0), "1970-01-01T00:00:00Z");
-        assert_eq!(rfc3339(1_789_588_800), "2026-09-17T20:00:00Z");
+        assert_eq!(rfc3339(1_789_588_800), "2026-09-16T20:00:00Z");
         assert_eq!(rfc3339(951_782_400), "2000-02-29T00:00:00Z");
     }
 
@@ -91,7 +91,7 @@ mod tests {
         let raw = std::fs::read_to_string(&p).expect("read");
         assert_eq!(
             raw,
-            "2026-09-17T20:00:00Z startup v0.4.0\n2026-09-17T20:01:00Z poll ok\n"
+            "2026-09-16T20:00:00Z startup v0.4.0\n2026-09-16T20:01:00Z poll ok\n"
         );
     }
 
