@@ -9,9 +9,8 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status (2026-09-16):** v1 design approved, see
-`docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`. Next step: implementation plan
-(`superpowers:writing-plans`), then scaffolding on a feature branch.
+**Status:** v1 implemented on branch `feat/v1-app` (menu bar text, popover, poll loop). Spec:
+`docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`.
 
 ## Reference Material (read before writing code)
 
