@@ -99,7 +99,8 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
 - Capabilities are an allowlist in `src-tauri/capabilities/default.json`. Grant the minimum.
   A missing capability fails silently in the webview — check there first when an `invoke`
   rejects for no reason. `opener:allow-open-url` needs an explicit `allow: [{url: "https://*"}]`
-  scope or it opens nothing. `notification:default` grants the alert notification permission.
+  scope or it opens nothing. Notifications are sent from Rust (`tauri-plugin-notification`),
+  which needs no capability entry; the macOS permission prompt is OS-level.
 - External links (Claude settings/usage pages) open via `plugin:opener|open_url`, never by
   navigating the webview.
 - Call plugin commands directly with `invoke('plugin:<name>|<cmd>')` from `src/lib/ipc.ts`

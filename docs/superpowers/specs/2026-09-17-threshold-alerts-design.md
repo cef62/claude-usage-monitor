@@ -76,7 +76,7 @@ hidden half can still raise it.
 ### Delivery (`main.rs` / `tray.rs`)
 
 - `Cargo.toml`: `tauri-plugin-notification = "2.4"`. `main.rs`: `.plugin(tauri_plugin_notification::init())`.
-- Capability `default.json`: add `"notification:default"`.
+- No capability entry: the Rust-side plugin call bypasses the webview capability system.
 - Poll closure (in `main.rs` `setup`): after `tray::refresh_title`, lock `AlertState`, call
   `evaluate(&mut state, &snapshot.quotas, &settings, now)`, and for each alert show
   `app.notification().builder().title("Claude usage: {label} {percent}%").body("Resets in {countdown}").show()`
@@ -120,4 +120,4 @@ Rust, inline `#[cfg(test)]`:
 
 ## Security notes
 
-New capability `notification:default` only. No network, no IPC changes.
+No new capabilities. No network, no IPC changes.
