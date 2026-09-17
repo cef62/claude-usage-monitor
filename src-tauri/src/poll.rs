@@ -52,6 +52,18 @@ fn lock(shared: &Shared) -> MutexGuard<'_, Snapshot> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Sleeps `secs` in TITLE_TICK slices, publishing the snapshot after each so the tray
+/// countdown keeps ticking without network traffic.
+fn sleep_ticking<F: Fn(&Snapshot)>(secs: u64, shared: &Shared, on_update: &F) {
+    let mut remaining = secs;
+    while remaining > 0 {
+        let step = remaining.min(TITLE_TICK);
+        std::thread::sleep(Duration::from_secs(step));
+        remaining -= step;
+        on_update(&read(shared));
+    }
+}
+
 pub fn read(shared: &Shared) -> Snapshot {
     lock(shared).clone()
 }
@@ -112,7 +124,7 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(shared: Shared, on_update: F) {
             if let Some(last) = last_success.filter(|last| now >= *last) {
                 let since = (now - last) as u64;
                 if since < COOLDOWN {
-                    std::thread::sleep(Duration::from_secs(COOLDOWN - since));
+                    sleep_ticking(COOLDOWN - since, &shared, &on_update);
                     continue;
                 }
             }
@@ -184,13 +196,7 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(shared: Shared, on_update: F) {
             }
             on_update(&read(&shared));
 
-            let mut remaining = delay;
-            while remaining > 0 {
-                let step = remaining.min(TITLE_TICK);
-                std::thread::sleep(Duration::from_secs(step));
-                remaining -= step;
-                on_update(&read(&shared));
-            }
+            sleep_ticking(delay, &shared, &on_update);
         }
     });
 }
