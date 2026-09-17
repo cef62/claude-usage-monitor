@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Popover window: core events plus opening claude.ai links in the browser",
+  "windows": ["popover"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://claude.ai/*" }]
+    }
+  ]
+}
