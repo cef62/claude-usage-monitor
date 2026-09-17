@@ -1,6 +1,7 @@
 //! Tray icon, its title text, the right-click menu, and popover placement.
 
 use crate::poll::{self, Snapshot, Status};
+use crate::settings::Settings;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalPosition, Manager, Rect};
@@ -9,6 +10,9 @@ pub const POPOVER_WIDTH: f64 = 320.0;
 pub const TRAY_ID: &str = "main";
 const USAGE_URL: &str = "https://claude.ai/settings/usage";
 const POPOVER_GAP: f64 = 6.0;
+pub const SESSION_GLYPH: &str = "◷";
+pub const WEEKLY_GLYPH: &str = "▦";
+pub const SEPARATOR: &str = "  ·  ";
 
 pub fn countdown(secs: i64) -> String {
     if secs < 60 {
@@ -26,31 +30,50 @@ pub fn countdown(secs: i64) -> String {
     }
 }
 
-fn half(s: &Snapshot, key: &str, glyph: &str, now: i64) -> String {
+fn half(s: &Snapshot, key: &str, glyph: &str, now: i64, settings: &Settings) -> String {
+    let mut parts: Vec<String> = Vec::with_capacity(3);
+    if settings.glyph {
+        parts.push(glyph.to_string());
+    }
     match s.quotas.iter().find(|q| q.key == key) {
-        Some(q) => format!(
-            "{glyph} {}% ↻{}",
-            q.percent.round() as i64,
-            countdown(q.resets_at - now)
-        ),
-        None => format!("{glyph} —"),
+        Some(q) => {
+            if settings.percent {
+                parts.push(format!("{}%", q.percent.round() as i64));
+            }
+            if settings.remaining {
+                parts.push(format!("↻{}", countdown(q.resets_at - now)));
+            }
+        }
+        None => parts.push("—".to_string()),
+    }
+    parts.join(" ")
+}
+
+fn status_text(text: &str, settings: &Settings) -> String {
+    if settings.glyph {
+        format!(" {SESSION_GLYPH} {text}")
+    } else {
+        format!(" {text}")
     }
 }
 
-pub fn title(s: &Snapshot, now: i64) -> String {
+pub fn title(s: &Snapshot, now: i64, settings: &Settings) -> String {
     let numbers = || {
-        format!(
-            "{} · {}",
-            half(s, "session", "⏱", now),
-            half(s, "weekly", "📅", now)
-        )
+        let mut halves = Vec::with_capacity(2);
+        if settings.session {
+            halves.push(half(s, "session", SESSION_GLYPH, now, settings));
+        }
+        if settings.weekly {
+            halves.push(half(s, "weekly", WEEKLY_GLYPH, now, settings));
+        }
+        format!(" {}", halves.join(SEPARATOR))
     };
     match s.status {
         Status::Ok => numbers(),
         Status::RateLimited { .. } => format!("{} (429)", numbers()),
-        Status::NoToken => "⏱ —".to_string(),
-        Status::AuthExpired => "⏱ ! login".to_string(),
-        Status::Error { .. } => "⏱ ! err".to_string(),
+        Status::NoToken => status_text("—", settings),
+        Status::AuthExpired => status_text("! login", settings),
+        Status::Error { .. } => status_text("! err", settings),
     }
 }
 
@@ -117,13 +140,14 @@ fn toggle_popover(app: &AppHandle, rect: &Rect) {
 
 pub fn refresh_title(app: &AppHandle, s: &Snapshot) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(Some(title(s, poll::now())));
+        let _ = tray.set_title(Some(title(s, poll::now(), &Settings::default())));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::Settings;
     use crate::usage::{Quota, SESSION_SECS, WEEKLY_SECS};
     use tauri::{LogicalSize, Position, Rect, Size};
 
@@ -166,24 +190,73 @@ mod tests {
         assert_eq!(countdown(3 * 86400 + 4 * 3600 + 20 * 60), "3d4h");
     }
 
+    fn with(keys_off: &[&str]) -> Settings {
+        let mut s = Settings::default();
+        for k in keys_off {
+            assert!(s.toggle(k), "could not disable {k}");
+        }
+        s
+    }
+
     #[test]
-    fn title_ok_shows_both_halves_and_ignores_scoped() {
+    fn title_all_on_shows_both_halves_and_ignores_scoped() {
         let s = snapshot(Status::Ok, both());
-        assert_eq!(title(&s, NOW), "⏱ 48% ↻2h13m · 📅 64% ↻3d4h");
+        assert_eq!(
+            title(&s, NOW, &Settings::default()),
+            " ◷ 48% ↻2h13m  ·  ▦ 64% ↻3d4h"
+        );
+    }
+
+    #[test]
+    fn title_without_glyphs() {
+        let s = snapshot(Status::Ok, both());
+        assert_eq!(
+            title(&s, NOW, &with(&["glyph"])),
+            " 48% ↻2h13m  ·  64% ↻3d4h"
+        );
+    }
+
+    #[test]
+    fn title_single_half_has_no_separator() {
+        let s = snapshot(Status::Ok, both());
+        assert_eq!(title(&s, NOW, &with(&["weekly"])), " ◷ 48% ↻2h13m");
+        assert_eq!(title(&s, NOW, &with(&["session"])), " ▦ 64% ↻3d4h");
+    }
+
+    #[test]
+    fn title_percent_or_remaining_only() {
+        let s = snapshot(Status::Ok, both());
+        assert_eq!(title(&s, NOW, &with(&["remaining"])), " ◷ 48%  ·  ▦ 64%");
+        assert_eq!(title(&s, NOW, &with(&["percent"])), " ◷ ↻2h13m  ·  ▦ ↻3d4h");
+        assert_eq!(
+            title(&s, NOW, &with(&["percent", "glyph", "weekly"])),
+            " ↻2h13m"
+        );
     }
 
     #[test]
     fn title_missing_quota_shows_dash() {
         let s = snapshot(Status::Ok, vec![quota("session", 48.0, 600, SESSION_SECS)]);
-        assert_eq!(title(&s, NOW), "⏱ 48% ↻10m · 📅 —");
+        assert_eq!(title(&s, NOW, &Settings::default()), " ◷ 48% ↻10m  ·  ▦ —");
+        assert_eq!(title(&s, NOW, &with(&["glyph"])), " 48% ↻10m  ·  —");
     }
 
     #[test]
     fn title_by_status() {
-        assert_eq!(title(&snapshot(Status::NoToken, vec![]), NOW), "⏱ —");
+        let d = Settings::default();
+        let no_glyph = with(&["glyph"]);
+        assert_eq!(title(&snapshot(Status::NoToken, vec![]), NOW, &d), " ◷ —");
         assert_eq!(
-            title(&snapshot(Status::AuthExpired, both()), NOW),
-            "⏱ ! login"
+            title(&snapshot(Status::NoToken, vec![]), NOW, &no_glyph),
+            " —"
+        );
+        assert_eq!(
+            title(&snapshot(Status::AuthExpired, both()), NOW, &d),
+            " ◷ ! login"
+        );
+        assert_eq!(
+            title(&snapshot(Status::AuthExpired, both()), NOW, &no_glyph),
+            " ! login"
         );
         assert_eq!(
             title(
@@ -193,16 +266,18 @@ mod tests {
                     },
                     both()
                 ),
-                NOW
+                NOW,
+                &d
             ),
-            "⏱ ! err"
+            " ◷ ! err"
         );
         assert_eq!(
             title(
                 &snapshot(Status::RateLimited { until: NOW + 900 }, both()),
-                NOW
+                NOW,
+                &d
             ),
-            "⏱ 48% ↻2h13m · 📅 64% ↻3d4h (429)"
+            " ◷ 48% ↻2h13m  ·  ▦ 64% ↻3d4h (429)"
         );
     }
 
