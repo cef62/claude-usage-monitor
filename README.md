@@ -67,4 +67,4 @@ Security** and click **Open Anyway**, or run
 
 ## Not yet
 
-Threshold notifications, settings, Windows tray icon, launch at login, code signing.
+Windows tray icon, launch at login, code signing.
