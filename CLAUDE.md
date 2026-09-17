@@ -9,11 +9,13 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1.2 (threshold alerts) implemented; released via the Changesets pipeline.
+**Status:** v1.3 (configuration, bar overlays, log) implemented; released via the Changesets
+pipeline.
 Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 `docs/superpowers/specs/2026-09-17-ci-release-design.md`,
 `docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`,
-`docs/superpowers/specs/2026-09-17-threshold-alerts-design.md`.
+`docs/superpowers/specs/2026-09-17-threshold-alerts-design.md`,
+`docs/superpowers/specs/2026-09-17-config-and-log-design.md`.
 
 ## Reference Material (read before writing code)
 
@@ -63,6 +65,7 @@ src-tauri/
   src/tray.rs              tray icon, menu, title text, popover positioning
   src/settings.rs          menu bar display settings, JSON in app_data_dir
   src/alerts.rs            threshold alert state machine (pure)
+  src/log.rs               capped local log (never the token)
   icons/
 test/                      Vitest specs for src/lib
 ```
@@ -85,7 +88,8 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
   Drop entries with null utilization or no `resets_at`. Utilization can exceed 100; show the
   raw number, clamp only the bar fill. `resets_at` has sub-second jitter — never compare for
   equality.
-- Rate limits (learned by the prior art through pain): base poll 180s, never two successful
+- Rate limits (learned by the prior art through pain): base poll 180s (user-configurable
+  120–900s), never two successful
   fetches closer than 120s, one in-flight request at a time, 429 → honor `Retry-After` else
   exponential backoff capped at 15 min, 401 → stop using that token until the credential store
   changes and tell the user to run `claude auth login`. No "refresh now" that bypasses the
