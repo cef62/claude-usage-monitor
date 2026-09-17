@@ -85,7 +85,7 @@ pub fn evaluate(
             .iter()
             .copied()
             .filter(|&level| q.percent >= f64::from(level))
-            .filter(|&level| level >= top_level || q.percent - elapsed > 2.0)
+            .filter(|&level| level >= top_level || q.percent > elapsed)
             .filter(|&level| !already_fired(state, &q.key, q.resets_at, level))
             .max();
         let Some(highest) = highest else {
@@ -284,8 +284,8 @@ mod tests {
     fn custom_levels_top_is_unconditional_and_lower_is_time_aware() {
         let s = with_levels(&[90, 95], &[95]);
         let mut st = AlertState::default();
-        // 92% with 30 min left (elapsed 90%): 90 is not ahead of the clock → silent.
-        assert!(evaluate(&mut st, &[session(92.0, 1800)], &s, NOW).is_empty());
+        // 92% with 20 min left (elapsed ~93%): 92 is behind the clock → silent.
+        assert!(evaluate(&mut st, &[session(92.0, 1200)], &s, NOW).is_empty());
         // 96%: top level fires regardless of the clock.
         let a = evaluate(&mut st, &[session(96.0, 1800)], &s, NOW);
         assert_eq!(a.len(), 1);
