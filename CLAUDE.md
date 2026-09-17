@@ -9,10 +9,10 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1 merged to `main`. CI and Changesets-driven releases in place; first release
-`0.1.0` is produced by merging the Version Packages PR. Spec:
-`docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`; pipeline spec:
-`docs/superpowers/specs/2026-09-17-ci-release-design.md`.
+**Status:** v1.1 (menu bar settings, ad-hoc signing) implemented; released via the Changesets pipeline.
+Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
+`docs/superpowers/specs/2026-09-17-ci-release-design.md`,
+`docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`.
 
 ## Reference Material (read before writing code)
 
@@ -60,6 +60,7 @@ src-tauri/
   src/usage.rs             credentials + HTTP + normalization
   src/poll.rs              poll loop, backoff, cooldown state machine
   src/tray.rs              tray icon, menu, title text, popover positioning
+  src/settings.rs          menu bar display settings, JSON in app_data_dir
   icons/
 test/                      Vitest specs for src/lib
 ```
@@ -110,7 +111,8 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
 - Release profile: `opt-level = "s"`, `lto = true`, `codegen-units = 1`, `strip = true`,
   `panic = "abort"`. `main.rs` starts with
   `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`.
-- The app is unsigned until told otherwise. No auto-updater until asked.
+- The app is ad-hoc signed (`signingIdentity: "-"`), not notarized, until an Apple Developer
+  account exists. No auto-updater until asked.
 
 ## Commands
 

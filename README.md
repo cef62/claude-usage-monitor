@@ -11,11 +11,15 @@ Built with Tauri 2, Rust, React and TypeScript. No third-party UI libraries.
 The app reads the Claude Code OAuth token from the macOS Keychain (service
 `Claude Code-credentials`), calls `https://api.anthropic.com/api/oauth/usage` every 3 minutes,
 and shows the percentages the API reports. It never stores or logs the token. If you are not
-logged in to Claude Code the menu bar shows `⏱ —`; if the token has expired it shows
-`⏱ ! login`. In both cases run `claude auth login` and the app recovers on its own.
+logged in to Claude Code the menu bar shows `◷ —`; if the token has expired it shows
+`◷ ! login`. In both cases run `claude auth login` and the app recovers on its own.
 
-Menu bar format: `⏱ 48% ↻2h13m · 📅 64% ↻3d4h` (session · weekly). ` (429)` after the text
+Menu bar format: `◷ 48% ↻2h13m  ·  ▦ 64% ↻3d4h` (session · weekly). ` (429)` after the text
 means the API is rate limiting us and the numbers may be a few minutes old.
+
+Right-click the menu bar item → **Menu bar** to choose what it shows: Session, Weekly, Glyphs
+(`◷` / `▦`), Percent, Remaining time. At least one quota and one of Percent/Remaining always
+stay on. Choices persist in `~/Library/Application Support/com.matteo.claude-usage-monitor/settings.json`.
 
 ## Development
 
@@ -29,7 +33,9 @@ pnpm verify         # biome, tsc, vitest, cargo fmt/clippy/test
 pnpm tauri build    # .app and .dmg under src-tauri/target/release/bundle/
 ```
 
-The app is unsigned. On first launch, right-click the `.app` and choose Open.
+The app is ad-hoc signed, not notarized. On first launch macOS says it cannot verify the
+developer: open **System Settings → Privacy & Security** and click **Open Anyway**, or run
+`xattr -cr "/Applications/Claude Usage Monitor.app"` once.
 
 ## Releases
 
@@ -38,8 +44,10 @@ bot keeps a "Version Packages" pull request up to date; merging it bumps `packag
 `src-tauri/tauri.conf.json`, writes `CHANGELOG.md`, and pushes a `vX.Y.Z` tag. The tag builds
 the Apple Silicon app and publishes a GitHub Release with the `.dmg` and `.app.tar.gz`.
 
-Download the latest build from the Releases page. The app is unsigned: right-click the `.app`
-and choose Open on first launch.
+Download the latest build from the Releases page. The app is ad-hoc signed, not notarized. On
+first launch macOS says it cannot verify the developer: open **System Settings → Privacy &
+Security** and click **Open Anyway**, or run
+`xattr -cr "/Applications/Claude Usage Monitor.app"` once.
 
 ## Not yet
 

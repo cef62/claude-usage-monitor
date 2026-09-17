@@ -1,14 +1,31 @@
 //! Tray icon, its title text, the right-click menu, and popover placement.
 
 use crate::poll::{self, Snapshot, Status};
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use crate::settings::{self, Settings, KEYS};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, LogicalPosition, Manager, Rect};
+use tauri::{AppHandle, LogicalPosition, Manager, Rect, Wry};
 
 pub const POPOVER_WIDTH: f64 = 320.0;
 pub const TRAY_ID: &str = "main";
 const USAGE_URL: &str = "https://claude.ai/settings/usage";
 const POPOVER_GAP: f64 = 6.0;
+pub const SESSION_GLYPH: &str = "◷";
+pub const WEEKLY_GLYPH: &str = "▦";
+pub const SEPARATOR: &str = "  ·  ";
+
+/// Check items of the "Menu bar" submenu, kept so the handler can re-sync check marks.
+pub struct MenuItems(pub HashMap<String, CheckMenuItem<Wry>>);
+
+const LABELS: [(&str, &str); 5] = [
+    ("session", "Session"),
+    ("weekly", "Weekly"),
+    ("glyph", "Glyphs"),
+    ("percent", "Percent"),
+    ("remaining", "Remaining time"),
+];
 
 pub fn countdown(secs: i64) -> String {
     if secs < 60 {
@@ -26,31 +43,50 @@ pub fn countdown(secs: i64) -> String {
     }
 }
 
-fn half(s: &Snapshot, key: &str, glyph: &str, now: i64) -> String {
+fn half(s: &Snapshot, key: &str, glyph: &str, now: i64, settings: &Settings) -> String {
+    let mut parts: Vec<String> = Vec::with_capacity(3);
+    if settings.glyph {
+        parts.push(glyph.to_string());
+    }
     match s.quotas.iter().find(|q| q.key == key) {
-        Some(q) => format!(
-            "{glyph} {}% ↻{}",
-            q.percent.round() as i64,
-            countdown(q.resets_at - now)
-        ),
-        None => format!("{glyph} —"),
+        Some(q) => {
+            if settings.percent {
+                parts.push(format!("{}%", q.percent.round() as i64));
+            }
+            if settings.remaining {
+                parts.push(format!("↻{}", countdown(q.resets_at - now)));
+            }
+        }
+        None => parts.push("—".to_string()),
+    }
+    parts.join(" ")
+}
+
+fn status_text(text: &str, settings: &Settings) -> String {
+    if settings.glyph {
+        format!(" {SESSION_GLYPH} {text}")
+    } else {
+        format!(" {text}")
     }
 }
 
-pub fn title(s: &Snapshot, now: i64) -> String {
+pub fn title(s: &Snapshot, now: i64, settings: &Settings) -> String {
     let numbers = || {
-        format!(
-            "{} · {}",
-            half(s, "session", "⏱", now),
-            half(s, "weekly", "📅", now)
-        )
+        let mut halves = Vec::with_capacity(2);
+        if settings.session {
+            halves.push(half(s, "session", SESSION_GLYPH, now, settings));
+        }
+        if settings.weekly {
+            halves.push(half(s, "weekly", WEEKLY_GLYPH, now, settings));
+        }
+        format!(" {}", halves.join(SEPARATOR))
     };
     match s.status {
         Status::Ok => numbers(),
         Status::RateLimited { .. } => format!("{} (429)", numbers()),
-        Status::NoToken => "⏱ —".to_string(),
-        Status::AuthExpired => "⏱ ! login".to_string(),
-        Status::Error { .. } => "⏱ ! err".to_string(),
+        Status::NoToken => status_text("—", settings),
+        Status::AuthExpired => status_text("! login", settings),
+        Status::Error { .. } => status_text("! err", settings),
     }
 }
 
@@ -65,10 +101,30 @@ pub fn popover_origin(rect: &Rect, scale: f64, width: f64) -> LogicalPosition<f6
 }
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
+    let current = *lock_settings(app);
     let open = MenuItemBuilder::with_id("open", "Open usage page").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+
+    let mut items = HashMap::new();
+    let mut submenu = SubmenuBuilder::new(app, "Menu bar");
+    for (key, label) in LABELS {
+        let item = CheckMenuItem::with_id(
+            app,
+            format!("set:{key}"),
+            label,
+            true,
+            current.get(key),
+            None::<&str>,
+        )?;
+        submenu = submenu.item(&item);
+        items.insert(key.to_string(), item);
+    }
+    let submenu = submenu.build()?;
+    app.manage(MenuItems(items));
+
     let menu = MenuBuilder::new(app)
         .item(&open)
+        .item(&submenu)
         .separator()
         .item(&quit)
         .build()?;
@@ -76,15 +132,22 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(tauri::include_image!("icons/tray.png"))
         .icon_as_template(true)
-        .title("⏱ —")
+        .title(title(&Snapshot::default(), poll::now(), &current))
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "open" => {
-                let _ = tauri_plugin_opener::open_url(USAGE_URL, None::<&str>);
+        .on_menu_event(|app, event| {
+            let id = event.id().as_ref();
+            match id {
+                "open" => {
+                    let _ = tauri_plugin_opener::open_url(USAGE_URL, None::<&str>);
+                }
+                "quit" => app.exit(0),
+                _ => {
+                    if let Some(key) = id.strip_prefix("set:") {
+                        on_setting_toggled(app, key);
+                    }
+                }
             }
-            "quit" => app.exit(0),
-            _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
@@ -99,6 +162,34 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
+}
+
+fn lock_settings(app: &AppHandle) -> std::sync::MutexGuard<'_, Settings> {
+    app.state::<Mutex<Settings>>()
+        .inner()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn on_setting_toggled(app: &AppHandle, key: &str) {
+    let updated = {
+        let mut s = lock_settings(app);
+        s.toggle(key);
+        *s
+    };
+    // Re-sync every check mark so a refused toggle snaps back.
+    if let Some(items) = app.try_state::<MenuItems>() {
+        for k in KEYS {
+            if let Some(item) = items.0.get(k) {
+                let _ = item.set_checked(updated.get(k));
+            }
+        }
+    }
+    if let Some(path) = settings::path(app) {
+        // The in-memory value already applies; a failed write only loses persistence.
+        let _ = settings::save(&path, &updated);
+    }
+    refresh_title(app, &poll::read(&app.state::<poll::Shared>()));
 }
 
 fn toggle_popover(app: &AppHandle, rect: &Rect) {
@@ -116,14 +207,16 @@ fn toggle_popover(app: &AppHandle, rect: &Rect) {
 }
 
 pub fn refresh_title(app: &AppHandle, s: &Snapshot) {
+    let settings = *lock_settings(app);
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(Some(title(s, poll::now())));
+        let _ = tray.set_title(Some(title(s, poll::now(), &settings)));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::Settings;
     use crate::usage::{Quota, SESSION_SECS, WEEKLY_SECS};
     use tauri::{LogicalSize, Position, Rect, Size};
 
@@ -166,24 +259,73 @@ mod tests {
         assert_eq!(countdown(3 * 86400 + 4 * 3600 + 20 * 60), "3d4h");
     }
 
+    fn with(keys_off: &[&str]) -> Settings {
+        let mut s = Settings::default();
+        for k in keys_off {
+            assert!(s.toggle(k), "could not disable {k}");
+        }
+        s
+    }
+
     #[test]
-    fn title_ok_shows_both_halves_and_ignores_scoped() {
+    fn title_all_on_shows_both_halves_and_ignores_scoped() {
         let s = snapshot(Status::Ok, both());
-        assert_eq!(title(&s, NOW), "⏱ 48% ↻2h13m · 📅 64% ↻3d4h");
+        assert_eq!(
+            title(&s, NOW, &Settings::default()),
+            " ◷ 48% ↻2h13m  ·  ▦ 64% ↻3d4h"
+        );
+    }
+
+    #[test]
+    fn title_without_glyphs() {
+        let s = snapshot(Status::Ok, both());
+        assert_eq!(
+            title(&s, NOW, &with(&["glyph"])),
+            " 48% ↻2h13m  ·  64% ↻3d4h"
+        );
+    }
+
+    #[test]
+    fn title_single_half_has_no_separator() {
+        let s = snapshot(Status::Ok, both());
+        assert_eq!(title(&s, NOW, &with(&["weekly"])), " ◷ 48% ↻2h13m");
+        assert_eq!(title(&s, NOW, &with(&["session"])), " ▦ 64% ↻3d4h");
+    }
+
+    #[test]
+    fn title_percent_or_remaining_only() {
+        let s = snapshot(Status::Ok, both());
+        assert_eq!(title(&s, NOW, &with(&["remaining"])), " ◷ 48%  ·  ▦ 64%");
+        assert_eq!(title(&s, NOW, &with(&["percent"])), " ◷ ↻2h13m  ·  ▦ ↻3d4h");
+        assert_eq!(
+            title(&s, NOW, &with(&["percent", "glyph", "weekly"])),
+            " ↻2h13m"
+        );
     }
 
     #[test]
     fn title_missing_quota_shows_dash() {
         let s = snapshot(Status::Ok, vec![quota("session", 48.0, 600, SESSION_SECS)]);
-        assert_eq!(title(&s, NOW), "⏱ 48% ↻10m · 📅 —");
+        assert_eq!(title(&s, NOW, &Settings::default()), " ◷ 48% ↻10m  ·  ▦ —");
+        assert_eq!(title(&s, NOW, &with(&["glyph"])), " 48% ↻10m  ·  —");
     }
 
     #[test]
     fn title_by_status() {
-        assert_eq!(title(&snapshot(Status::NoToken, vec![]), NOW), "⏱ —");
+        let d = Settings::default();
+        let no_glyph = with(&["glyph"]);
+        assert_eq!(title(&snapshot(Status::NoToken, vec![]), NOW, &d), " ◷ —");
         assert_eq!(
-            title(&snapshot(Status::AuthExpired, both()), NOW),
-            "⏱ ! login"
+            title(&snapshot(Status::NoToken, vec![]), NOW, &no_glyph),
+            " —"
+        );
+        assert_eq!(
+            title(&snapshot(Status::AuthExpired, both()), NOW, &d),
+            " ◷ ! login"
+        );
+        assert_eq!(
+            title(&snapshot(Status::AuthExpired, both()), NOW, &no_glyph),
+            " ! login"
         );
         assert_eq!(
             title(
@@ -193,16 +335,18 @@ mod tests {
                     },
                     both()
                 ),
-                NOW
+                NOW,
+                &d
             ),
-            "⏱ ! err"
+            " ◷ ! err"
         );
         assert_eq!(
             title(
                 &snapshot(Status::RateLimited { until: NOW + 900 }, both()),
-                NOW
+                NOW,
+                &d
             ),
-            "⏱ 48% ↻2h13m · 📅 64% ↻3d4h (429)"
+            " ◷ 48% ↻2h13m  ·  ▦ 64% ↻3d4h (429)"
         );
     }
 
