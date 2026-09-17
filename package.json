@@ -19,7 +19,7 @@
     "verify": "pnpm check && pnpm typecheck && pnpm test:run && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml",
     "changeset": "changeset",
     "version-packages": "changeset version && node scripts/sync-version.mjs",
-    "release:tag": "changeset tag"
+    "release:tag": "changeset git-tag"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

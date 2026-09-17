@@ -11,6 +11,7 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   version-or-tag:
@@ -30,14 +31,20 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # With pending changesets: opens/updates the "Version Packages" PR.
-      # Without: runs `changeset tag` and pushes the new vX.Y.Z tag, which
-      # triggers build-release.yml. GitHub Releases are created there, not here.
-      - uses: changesets/action@v1
+      # Without: runs `changeset git-tag` and pushes the new vX.Y.Z tag.
+      # GitHub Releases are created by build-release.yml, not here.
+      - uses: changesets/action@v2
+        id: changesets
         with:
-          version: pnpm version-packages
-          publish: pnpm release:tag
-          createGithubReleases: false
-          commit: "chore: version packages"
-          title: "chore: version packages"
+          version-script: pnpm version-packages
+          publish-script: pnpm release:tag
+          create-github-releases: false
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+
+      # A tag pushed with GITHUB_TOKEN never triggers `on: push: tags`, so start the
+      # build explicitly for the tag that was just created.
+      - if: steps.changesets.outputs.published == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build-release.yml --ref "v$(node -p "require('./package.json').version")"
