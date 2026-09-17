@@ -132,7 +132,7 @@ pub fn popover_origin(rect: &Rect, scale: f64, width: f64) -> LogicalPosition<f6
 }
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
-    let current = *lock_settings(app);
+    let current = lock_settings(app).clone();
     let open = MenuItemBuilder::with_id("open", "Open usage page").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
@@ -195,7 +195,7 @@ fn on_setting_toggled(app: &AppHandle, key: &str) {
     let updated = {
         let mut s = lock_settings(app);
         s.toggle(key);
-        *s
+        s.clone()
     };
     // Re-sync every check mark so a refused toggle snaps back.
     if let Some(items) = app.try_state::<MenuItems>() {
@@ -227,7 +227,7 @@ fn toggle_popover(app: &AppHandle, rect: &Rect) {
 }
 
 pub fn refresh_title(app: &AppHandle, s: &Snapshot) {
-    let settings = *lock_settings(app);
+    let settings = lock_settings(app).clone();
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let _ = tray.set_title(Some(title(s, poll::now(), &settings)));
     }

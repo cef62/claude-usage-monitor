@@ -40,10 +40,11 @@ fn quit(app: AppHandle) -> Result<(), String> {
 /// Shows one macOS notification per newly crossed threshold. Failures are ignored: the title
 /// marker still tells the story if notifications are denied.
 fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
-    let settings = *app
+    let settings = app
         .state::<Mutex<settings::Settings>>()
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone();
     let now = poll::now();
     let due = {
         let state = app.state::<Mutex<alerts::AlertState>>();
