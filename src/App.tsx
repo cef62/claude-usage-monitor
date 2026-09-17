@@ -63,12 +63,19 @@ export default function App() {
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let cancelled = false;
     let off = () => {};
-    getSnapshot().then(setSnap);
-    onUsage(setSnap).then((unlisten) => {
-      off = unlisten;
+    getSnapshot().then((s) => {
+      if (!cancelled) setSnap(s);
     });
-    return () => off();
+    onUsage(setSnap).then((unlisten) => {
+      if (cancelled) unlisten();
+      else off = unlisten;
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
   }, []);
 
   useEffect(() => {
