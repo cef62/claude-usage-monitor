@@ -1,10 +1,12 @@
 //! Tray icon, its title text, the right-click menu, and popover placement.
 
 use crate::poll::{self, Snapshot, Status};
-use crate::settings::Settings;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use crate::settings::{self, Settings, KEYS};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, LogicalPosition, Manager, Rect};
+use tauri::{AppHandle, LogicalPosition, Manager, Rect, Wry};
 
 pub const POPOVER_WIDTH: f64 = 320.0;
 pub const TRAY_ID: &str = "main";
@@ -13,6 +15,17 @@ const POPOVER_GAP: f64 = 6.0;
 pub const SESSION_GLYPH: &str = "◷";
 pub const WEEKLY_GLYPH: &str = "▦";
 pub const SEPARATOR: &str = "  ·  ";
+
+/// Check items of the "Menu bar" submenu, kept so the handler can re-sync check marks.
+pub struct MenuItems(pub HashMap<String, CheckMenuItem<Wry>>);
+
+const LABELS: [(&str, &str); 5] = [
+    ("session", "Session"),
+    ("weekly", "Weekly"),
+    ("glyph", "Glyphs"),
+    ("percent", "Percent"),
+    ("remaining", "Remaining time"),
+];
 
 pub fn countdown(secs: i64) -> String {
     if secs < 60 {
@@ -88,10 +101,30 @@ pub fn popover_origin(rect: &Rect, scale: f64, width: f64) -> LogicalPosition<f6
 }
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
+    let current = *lock_settings(app);
     let open = MenuItemBuilder::with_id("open", "Open usage page").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+
+    let mut items = HashMap::new();
+    let mut submenu = SubmenuBuilder::new(app, "Menu bar");
+    for (key, label) in LABELS {
+        let item = CheckMenuItem::with_id(
+            app,
+            format!("set:{key}"),
+            label,
+            true,
+            current.get(key),
+            None::<&str>,
+        )?;
+        submenu = submenu.item(&item);
+        items.insert(key.to_string(), item);
+    }
+    let submenu = submenu.build()?;
+    app.manage(MenuItems(items));
+
     let menu = MenuBuilder::new(app)
         .item(&open)
+        .item(&submenu)
         .separator()
         .item(&quit)
         .build()?;
@@ -99,15 +132,22 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(tauri::include_image!("icons/tray.png"))
         .icon_as_template(true)
-        .title("⏱ —")
+        .title(title(&Snapshot::default(), poll::now(), &current))
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "open" => {
-                let _ = tauri_plugin_opener::open_url(USAGE_URL, None::<&str>);
+        .on_menu_event(|app, event| {
+            let id = event.id().as_ref();
+            match id {
+                "open" => {
+                    let _ = tauri_plugin_opener::open_url(USAGE_URL, None::<&str>);
+                }
+                "quit" => app.exit(0),
+                _ => {
+                    if let Some(key) = id.strip_prefix("set:") {
+                        on_setting_toggled(app, key);
+                    }
+                }
             }
-            "quit" => app.exit(0),
-            _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
@@ -122,6 +162,34 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
+}
+
+fn lock_settings(app: &AppHandle) -> std::sync::MutexGuard<'_, Settings> {
+    app.state::<Mutex<Settings>>()
+        .inner()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn on_setting_toggled(app: &AppHandle, key: &str) {
+    let updated = {
+        let mut s = lock_settings(app);
+        s.toggle(key);
+        *s
+    };
+    // Re-sync every check mark so a refused toggle snaps back.
+    if let Some(items) = app.try_state::<MenuItems>() {
+        for k in KEYS {
+            if let Some(item) = items.0.get(k) {
+                let _ = item.set_checked(updated.get(k));
+            }
+        }
+    }
+    if let Some(path) = settings::path(app) {
+        // The in-memory value already applies; a failed write only loses persistence.
+        let _ = settings::save(&path, &updated);
+    }
+    refresh_title(app, &poll::read(&app.state::<poll::Shared>()));
 }
 
 fn toggle_popover(app: &AppHandle, rect: &Rect) {
@@ -139,8 +207,9 @@ fn toggle_popover(app: &AppHandle, rect: &Rect) {
 }
 
 pub fn refresh_title(app: &AppHandle, s: &Snapshot) {
+    let settings = *lock_settings(app);
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(Some(title(s, poll::now(), &Settings::default())));
+        let _ = tray.set_title(Some(title(s, poll::now(), &settings)));
     }
 }
 

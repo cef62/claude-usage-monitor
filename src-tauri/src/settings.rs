@@ -66,12 +66,27 @@ impl Settings {
         }
         true
     }
+
+    /// Heals a hand-edited file that violates the "at least one of each pair is on" invariant,
+    /// so the title can never end up blank.
+    pub fn repair(&mut self) {
+        if !self.session && !self.weekly {
+            self.session = true;
+        }
+        if !self.percent && !self.remaining {
+            self.percent = true;
+        }
+    }
 }
 
 pub fn load(path: &Path) -> Settings {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
+        .map(|mut s: Settings| {
+            s.repair();
+            s
+        })
         .unwrap_or_default()
 }
 
@@ -160,6 +175,23 @@ mod tests {
         assert!(raw.ends_with('\n'));
         assert!(raw.contains("\"glyph\": false"));
         assert_eq!(load(&p), s);
+    }
+
+    #[test]
+    fn load_repairs_invariant_violations() {
+        let p = temp_path("repair");
+        std::fs::create_dir_all(p.parent().expect("parent")).expect("mkdir");
+        std::fs::write(
+            &p,
+            r#"{"session": false, "weekly": false, "percent": false, "remaining": false}"#,
+        )
+        .expect("write");
+        let s = load(&p);
+        assert!(s.session);
+        assert!(!s.weekly);
+        assert!(s.percent);
+        assert!(!s.remaining);
+        assert!(s.glyph);
     }
 
     #[test]

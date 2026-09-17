@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use claude_usage_monitor::poll::{self, Shared, Snapshot};
+use claude_usage_monitor::settings;
 use claude_usage_monitor::tray;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
@@ -55,6 +56,10 @@ fn main() {
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            let initial = settings::path(app.handle())
+                .map(|p| settings::load(&p))
+                .unwrap_or_default();
+            app.manage(Mutex::new(initial));
             tray::setup(app.handle())?;
             let handle = app.handle().clone();
             poll::run(shared, move |snapshot| {
