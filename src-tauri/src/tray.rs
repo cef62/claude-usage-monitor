@@ -4,7 +4,7 @@ use crate::alerts;
 use crate::poll::{self, Snapshot, Status};
 use crate::settings::{self, Settings, KEYS};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalPosition, Manager, Rect, Wry};
@@ -185,7 +185,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn lock_settings(app: &AppHandle) -> std::sync::MutexGuard<'_, Settings> {
-    app.state::<Mutex<Settings>>()
+    app.state::<Arc<Mutex<Settings>>>()
         .inner()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())

@@ -2,7 +2,7 @@
 
 use claude_usage_monitor::poll::{self, Shared, Snapshot};
 use claude_usage_monitor::tray;
-use claude_usage_monitor::{alerts, settings};
+use claude_usage_monitor::{alerts, log, settings};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_notification::NotificationExt;
@@ -41,7 +41,7 @@ fn quit(app: AppHandle) -> Result<(), String> {
 /// marker still tells the story if notifications are denied.
 fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
     let settings = app
-        .state::<Mutex<settings::Settings>>()
+        .state::<Arc<Mutex<settings::Settings>>>()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone();
@@ -67,6 +67,15 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
                 tray::countdown(alert.resets_at - now)
             ))
             .show();
+        log::write(
+            app,
+            &format!(
+                "alert {} {} at {}%",
+                alert.key,
+                alert.level,
+                alert.percent.round() as i64
+            ),
+        );
     }
 }
 
@@ -94,11 +103,16 @@ fn main() {
             let initial = settings::path(app.handle())
                 .map(|p| settings::load(&p))
                 .unwrap_or_default();
-            app.manage(Mutex::new(initial));
+            let settings = Arc::new(Mutex::new(initial));
+            app.manage(settings.clone());
             app.manage(Mutex::new(alerts::AlertState::default()));
             tray::setup(app.handle())?;
+            log::write(
+                app.handle(),
+                &format!("startup v{}", app.package_info().version),
+            );
             let handle = app.handle().clone();
-            poll::run(shared, move |snapshot| {
+            poll::run(shared, settings, log::path(app.handle()), move |snapshot| {
                 tray::refresh_title(&handle, snapshot);
                 notify_thresholds(&handle, snapshot);
                 let _ = handle.emit("usage", snapshot);
