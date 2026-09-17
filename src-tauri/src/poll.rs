@@ -91,7 +91,7 @@ pub fn next_delay(
     match outcome {
         Outcome::Success => match nearest_reset {
             Some(reset) if reset > now && (reset - now) as u64 + RESET_GRACE < BASE_INTERVAL => {
-                (reset - now) as u64 + RESET_GRACE
+                ((reset - now) as u64 + RESET_GRACE).max(COOLDOWN)
             }
             _ => BASE_INTERVAL,
         },
@@ -117,10 +117,9 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(shared: Shared, on_update: F) {
         loop {
             let now = now();
             // Clock-jump guard: a backwards jump must not freeze polling.
-            // ponytail: the cooldown check runs before the reset-aligned delay is honored, so a
-            // reset less than 120s after a successful fetch is observed on the next regular poll
-            // instead. Upgrade path: skip the cooldown when the previous outcome was a
-            // reset-aligned poll.
+            // ponytail: next_delay now floors the reset-aligned result at COOLDOWN, so this
+            // cooldown check is a safety net for backwards clock jumps rather than the primary
+            // enforcement. Upgrade path: skip it entirely once next_delay is trusted alone.
             if let Some(last) = last_success.filter(|last| now >= *last) {
                 let since = (now - last) as u64;
                 if since < COOLDOWN {
@@ -136,22 +135,30 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(shared: Shared, on_update: F) {
                 }
                 Some(creds) if latched_fingerprint == Some(creds.fingerprint) => {
                     // Known-bad token: wait for the credential store to change.
+                    // Re-assert AuthExpired: a NoToken cycle in between could have overwritten it.
+                    lock(&shared).status = Status::AuthExpired;
                     Outcome::Unauthorized
                 }
                 Some(creds) => {
                     match usage::fetch_usage(&client, USAGE_BASE_URL, &creds.token, &user_agent) {
                         Ok(body) => {
                             let quotas = usage::normalize(&body);
-                            error_count = 0;
-                            latched_fingerprint = None;
-                            last_success = Some(now);
-                            let mut s = lock(&shared);
-                            if !quotas.is_empty() {
+                            if quotas.is_empty() {
+                                error_count += 1;
+                                lock(&shared).status = Status::Error {
+                                    message: "no quotas in response".to_string(),
+                                };
+                                Outcome::Failed
+                            } else {
+                                error_count = 0;
+                                latched_fingerprint = None;
+                                last_success = Some(now);
+                                let mut s = lock(&shared);
                                 s.quotas = quotas;
+                                s.fetched_at = Some(now);
+                                s.status = Status::Ok;
+                                Outcome::Success
                             }
-                            s.fetched_at = Some(now);
-                            s.status = Status::Ok;
-                            Outcome::Success
                         }
                         Err(FetchError::Unauthorized) => {
                             latched_fingerprint = Some(creds.fingerprint);
@@ -224,7 +231,11 @@ mod tests {
     fn success_aligns_to_an_imminent_reset() {
         assert_eq!(
             next_delay(&Outcome::Success, 0, Some(NOW + 60), NOW),
-            60 + RESET_GRACE
+            COOLDOWN
+        );
+        assert_eq!(
+            next_delay(&Outcome::Success, 0, Some(NOW + 150), NOW),
+            150 + RESET_GRACE
         );
     }
 
