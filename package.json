@@ -1,6 +1,6 @@
 {
   "name": "claude-usage-monitor",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.3.4",
@@ -16,7 +16,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "verify": "pnpm check && pnpm typecheck && pnpm test:run && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml"
+    "verify": "pnpm check && pnpm typecheck && pnpm test:run && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml",
+    "changeset": "changeset",
+    "version-packages": "changeset version && node scripts/sync-version.mjs",
+    "release:tag": "changeset tag"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
@@ -25,6 +28,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "@changesets/cli": "3.0.3",
     "@tauri-apps/cli": "2.11.4",
     "@types/node": "^24",
     "@types/react": "19.3.0",
