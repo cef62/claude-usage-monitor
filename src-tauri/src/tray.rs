@@ -1,13 +1,18 @@
 //! Tray icon, its title text, the right-click menu, and popover placement.
 
 use crate::alerts;
+use crate::log;
 use crate::poll::{self, Snapshot, Status};
-use crate::settings::{self, Settings, KEYS};
+use crate::settings::{
+    self, format_levels, parse_levels, PopoverSettings, Settings, INTERVAL_PRESETS, KEYS,
+    SESSION_LEVEL_PRESETS, WEEKLY_LEVEL_PRESETS,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, LogicalPosition, Manager, Rect, Wry};
+use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Rect, Wry};
+use tauri_plugin_notification::NotificationExt;
 
 pub const POPOVER_WIDTH: f64 = 320.0;
 pub const TRAY_ID: &str = "main";
@@ -30,6 +35,60 @@ const DISPLAY_LABELS: [(&str, &str); 5] = [
 
 const ALERT_LABELS: [(&str, &str); 2] = [("alert_session", "Session"), ("alert_weekly", "Weekly")];
 
+const POPOVER_LABELS: [(&str, &str); 3] = [
+    ("show_time_ticks", "Time ticks"),
+    ("show_elapsed_marker", "Elapsed marker"),
+    ("show_threshold_marks", "Threshold marks"),
+];
+
+#[derive(Debug, PartialEq)]
+pub enum MenuAction {
+    Open,
+    Quit,
+    Toggle(String),
+    Levels { key: String, levels: Vec<u8> },
+    Interval(u64),
+    TestNotification,
+    OpenLog,
+}
+
+pub fn radio_id_levels(key: &str, levels: &[u8]) -> String {
+    let joined = levels
+        .iter()
+        .map(u8::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("levels:{key}:{joined}")
+}
+
+pub fn radio_id_interval(secs: u64) -> String {
+    format!("interval:{secs}")
+}
+
+pub fn parse_menu_id(id: &str) -> Option<MenuAction> {
+    match id {
+        "open" => return Some(MenuAction::Open),
+        "quit" => return Some(MenuAction::Quit),
+        "test-notification" => return Some(MenuAction::TestNotification),
+        "open-log" => return Some(MenuAction::OpenLog),
+        _ => {}
+    }
+    if let Some(key) = id.strip_prefix("set:") {
+        return Some(MenuAction::Toggle(key.to_string()));
+    }
+    if let Some(rest) = id.strip_prefix("levels:") {
+        let (key, raw) = rest.split_once(':')?;
+        return parse_levels(raw).map(|levels| MenuAction::Levels {
+            key: key.to_string(),
+            levels,
+        });
+    }
+    if let Some(raw) = id.strip_prefix("interval:") {
+        return raw.parse().ok().map(MenuAction::Interval);
+    }
+    None
+}
+
 fn check_submenu(
     app: &AppHandle,
     text: &str,
@@ -51,6 +110,48 @@ fn check_submenu(
         items.insert((*key).to_string(), item);
     }
     submenu.build()
+}
+
+fn radio_submenu(
+    app: &AppHandle,
+    text: &str,
+    entries: &[(String, String, bool)], // (id, label, checked)
+    items: &mut HashMap<String, CheckMenuItem<Wry>>,
+) -> tauri::Result<tauri::menu::Submenu<Wry>> {
+    let mut submenu = SubmenuBuilder::new(app, text);
+    for (id, label, checked) in entries {
+        let item = CheckMenuItem::with_id(
+            app,
+            id.clone(),
+            label.as_str(),
+            true,
+            *checked,
+            None::<&str>,
+        )?;
+        submenu = submenu.item(&item);
+        items.insert(id.clone(), item);
+    }
+    submenu.build()
+}
+
+fn level_entries(key: &str, presets: &[&[u8]], current: &[u8]) -> Vec<(String, String, bool)> {
+    presets
+        .iter()
+        .map(|p| (radio_id_levels(key, p), format_levels(p), *p == current))
+        .collect()
+}
+
+fn interval_entries(current: u64) -> Vec<(String, String, bool)> {
+    INTERVAL_PRESETS
+        .iter()
+        .map(|&s| {
+            (
+                radio_id_interval(s),
+                format!("{} min", s / 60),
+                s == current,
+            )
+        })
+        .collect()
 }
 
 pub fn countdown(secs: i64) -> String {
@@ -138,13 +239,62 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
 
     let mut items = HashMap::new();
     let display = check_submenu(app, "Menu bar", &DISPLAY_LABELS, &current, &mut items)?;
-    let alerts_menu = check_submenu(app, "Alerts", &ALERT_LABELS, &current, &mut items)?;
+    let popover = check_submenu(app, "Popover", &POPOVER_LABELS, &current, &mut items)?;
+
+    let session_levels = radio_submenu(
+        app,
+        "Session levels",
+        &level_entries("session", &SESSION_LEVEL_PRESETS, &current.session_levels),
+        &mut items,
+    )?;
+    let weekly_levels = radio_submenu(
+        app,
+        "Weekly levels",
+        &level_entries("weekly", &WEEKLY_LEVEL_PRESETS, &current.weekly_levels),
+        &mut items,
+    )?;
+    let mut alerts_menu = SubmenuBuilder::new(app, "Alerts");
+    for (key, label) in ALERT_LABELS {
+        let item = CheckMenuItem::with_id(
+            app,
+            format!("set:{key}"),
+            label,
+            true,
+            current.get(key),
+            None::<&str>,
+        )?;
+        alerts_menu = alerts_menu.item(&item);
+        items.insert(key.to_string(), item);
+    }
+    let test_item =
+        MenuItemBuilder::with_id("test-notification", "Send test notification").build(app)?;
+    let alerts_menu = alerts_menu
+        .separator()
+        .item(&session_levels)
+        .item(&weekly_levels)
+        .separator()
+        .item(&test_item)
+        .build()?;
+
+    let interval = radio_submenu(
+        app,
+        "Check every",
+        &interval_entries(current.poll_interval_secs),
+        &mut items,
+    )?;
+    let open_log_item = MenuItemBuilder::with_id("open-log", "Open log").build(app)?;
+    let help = SubmenuBuilder::new(app, "Help")
+        .item(&open_log_item)
+        .build()?;
     app.manage(MenuItems(items));
 
     let menu = MenuBuilder::new(app)
         .item(&open)
         .item(&display)
+        .item(&popover)
         .item(&alerts_menu)
+        .item(&interval)
+        .item(&help)
         .separator()
         .item(&quit)
         .build()?;
@@ -155,19 +305,17 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .title(title(&Snapshot::default(), poll::now(), &current))
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            let id = event.id().as_ref();
-            match id {
-                "open" => {
-                    let _ = tauri_plugin_opener::open_url(USAGE_URL, None::<&str>);
-                }
-                "quit" => app.exit(0),
-                _ => {
-                    if let Some(key) = id.strip_prefix("set:") {
-                        on_setting_toggled(app, key);
-                    }
-                }
+        .on_menu_event(|app, event| match parse_menu_id(event.id().as_ref()) {
+            Some(MenuAction::Open) => {
+                let _ = tauri_plugin_opener::open_url(USAGE_URL, None::<&str>);
             }
+            Some(MenuAction::Quit) => app.exit(0),
+            Some(MenuAction::Toggle(key)) => on_setting_toggled(app, &key),
+            Some(MenuAction::Levels { key, levels }) => on_levels_chosen(app, &key, &levels),
+            Some(MenuAction::Interval(secs)) => on_interval_chosen(app, secs),
+            Some(MenuAction::TestNotification) => send_test_notification(app),
+            Some(MenuAction::OpenLog) => open_log(app),
+            None => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
@@ -191,25 +339,99 @@ fn lock_settings(app: &AppHandle) -> std::sync::MutexGuard<'_, Settings> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn on_setting_toggled(app: &AppHandle, key: &str) {
-    let updated = {
-        let mut s = lock_settings(app);
-        s.toggle(key);
-        s.clone()
-    };
-    // Re-sync every check mark so a refused toggle snaps back.
+/// Re-syncs every check/radio mark, persists, logs, notifies the popover, refreshes the title.
+fn after_settings_change(app: &AppHandle, updated: &Settings, log_text: &str) {
     if let Some(items) = app.try_state::<MenuItems>() {
         for k in KEYS {
             if let Some(item) = items.0.get(k) {
                 let _ = item.set_checked(updated.get(k));
             }
         }
+        for p in SESSION_LEVEL_PRESETS {
+            if let Some(item) = items.0.get(&radio_id_levels("session", p)) {
+                let _ = item.set_checked(p == updated.session_levels.as_slice());
+            }
+        }
+        for p in WEEKLY_LEVEL_PRESETS {
+            if let Some(item) = items.0.get(&radio_id_levels("weekly", p)) {
+                let _ = item.set_checked(p == updated.weekly_levels.as_slice());
+            }
+        }
+        for s in INTERVAL_PRESETS {
+            if let Some(item) = items.0.get(&radio_id_interval(s)) {
+                let _ = item.set_checked(s == updated.poll_interval_secs);
+            }
+        }
     }
     if let Some(path) = settings::path(app) {
         // The in-memory value already applies; a failed write only loses persistence.
-        let _ = settings::save(&path, &updated);
+        let _ = settings::save(&path, updated);
     }
+    log::write(app, log_text);
+    let _ = app.emit("settings", PopoverSettings::from(updated));
     refresh_title(app, &poll::read(&app.state::<poll::Shared>()));
+}
+
+fn on_setting_toggled(app: &AppHandle, key: &str) {
+    let updated = {
+        let mut s = lock_settings(app);
+        s.toggle(key);
+        s.clone()
+    };
+    after_settings_change(
+        app,
+        &updated,
+        &format!("settings {key}={}", updated.get(key)),
+    );
+}
+
+fn on_levels_chosen(app: &AppHandle, key: &str, levels: &[u8]) {
+    let updated = {
+        let mut s = lock_settings(app);
+        s.set_levels(key, levels);
+        s.clone()
+    };
+    after_settings_change(
+        app,
+        &updated,
+        &format!(
+            "settings {key}_levels={}",
+            format_levels(updated.levels(key))
+        ),
+    );
+}
+
+fn on_interval_chosen(app: &AppHandle, secs: u64) {
+    let updated = {
+        let mut s = lock_settings(app);
+        s.set_poll_interval(secs);
+        s.clone()
+    };
+    after_settings_change(
+        app,
+        &updated,
+        &format!("settings poll_interval_secs={}", updated.poll_interval_secs),
+    );
+}
+
+fn send_test_notification(app: &AppHandle) {
+    let _ = app
+        .notification()
+        .builder()
+        .title("Claude usage: test")
+        .body("Notifications are working")
+        .show();
+    log::write(app, "test notification");
+}
+
+fn open_log(app: &AppHandle) {
+    let Some(path) = log::path(app) else {
+        return;
+    };
+    if !path.exists() {
+        let _ = log::append(&path, "log created from Help → Open log");
+    }
+    let _ = tauri_plugin_opener::reveal_item_in_dir(&path);
 }
 
 fn toggle_popover(app: &AppHandle, rect: &Rect) {
@@ -404,6 +626,37 @@ mod tests {
             vec![quota("session", 99.0, 600, SESSION_SECS)],
         );
         assert_eq!(title(&s, NOW, &Settings::default()), " ◷ ! login");
+    }
+
+    #[test]
+    fn menu_ids_round_trip() {
+        assert_eq!(
+            radio_id_levels("session", &[80, 95]),
+            "levels:session:80,95"
+        );
+        assert_eq!(radio_id_interval(300), "interval:300");
+        assert!(matches!(parse_menu_id("open"), Some(MenuAction::Open)));
+        assert!(matches!(parse_menu_id("quit"), Some(MenuAction::Quit)));
+        assert!(matches!(parse_menu_id("set:glyph"), Some(MenuAction::Toggle(k)) if k == "glyph"));
+        assert!(matches!(
+            parse_menu_id("levels:weekly:80,95"),
+            Some(MenuAction::Levels { key, levels }) if key == "weekly" && levels == vec![80, 95]
+        ));
+        assert!(matches!(
+            parse_menu_id("interval:600"),
+            Some(MenuAction::Interval(600))
+        ));
+        assert!(matches!(
+            parse_menu_id("test-notification"),
+            Some(MenuAction::TestNotification)
+        ));
+        assert!(matches!(
+            parse_menu_id("open-log"),
+            Some(MenuAction::OpenLog)
+        ));
+        assert!(parse_menu_id("levels:weekly:x").is_none());
+        assert!(parse_menu_id("interval:abc").is_none());
+        assert!(parse_menu_id("bogus").is_none());
     }
 
     #[test]
