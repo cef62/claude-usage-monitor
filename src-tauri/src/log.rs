@@ -26,7 +26,7 @@ pub fn append_at(path: &Path, now: i64, line: &str) -> std::io::Result<()> {
         .create(true)
         .append(true)
         .open(path)?;
-    writeln!(file, "{} {line}", rfc3339(now))
+    file.write_all(format!("{} {line}\n", rfc3339(now)).as_bytes())
 }
 
 pub fn append(path: &Path, line: &str) -> std::io::Result<()> {

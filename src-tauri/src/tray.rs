@@ -339,8 +339,9 @@ fn lock_settings(app: &AppHandle) -> std::sync::MutexGuard<'_, Settings> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Re-syncs every check/radio mark, persists, logs, notifies the popover, refreshes the title.
-fn after_settings_change(app: &AppHandle, updated: &Settings, log_text: &str) {
+/// Re-syncs every check/radio mark, persists, logs (when `log_text` is `Some`), notifies the
+/// popover, refreshes the title.
+fn after_settings_change(app: &AppHandle, updated: &Settings, log_text: Option<&str>) {
     if let Some(items) = app.try_state::<MenuItems>() {
         for k in KEYS {
             if let Some(item) = items.0.get(k) {
@@ -367,22 +368,21 @@ fn after_settings_change(app: &AppHandle, updated: &Settings, log_text: &str) {
         // The in-memory value already applies; a failed write only loses persistence.
         let _ = settings::save(&path, updated);
     }
-    log::write(app, log_text);
+    if let Some(text) = log_text {
+        log::write(app, text);
+    }
     let _ = app.emit("settings", PopoverSettings::from(updated));
     refresh_title(app, &poll::read(&app.state::<poll::Shared>()));
 }
 
 fn on_setting_toggled(app: &AppHandle, key: &str) {
-    let updated = {
+    let (changed, updated) = {
         let mut s = lock_settings(app);
-        s.toggle(key);
-        s.clone()
+        let changed = s.toggle(key);
+        (changed, s.clone())
     };
-    after_settings_change(
-        app,
-        &updated,
-        &format!("settings {key}={}", updated.get(key)),
-    );
+    let log_text = changed.then(|| format!("settings {key}={}", updated.get(key)));
+    after_settings_change(app, &updated, log_text.as_deref());
 }
 
 fn on_levels_chosen(app: &AppHandle, key: &str, levels: &[u8]) {
@@ -394,10 +394,10 @@ fn on_levels_chosen(app: &AppHandle, key: &str, levels: &[u8]) {
     after_settings_change(
         app,
         &updated,
-        &format!(
+        Some(&format!(
             "settings {key}_levels={}",
             format_levels(updated.levels(key))
-        ),
+        )),
     );
 }
 
@@ -410,7 +410,10 @@ fn on_interval_chosen(app: &AppHandle, secs: u64) {
     after_settings_change(
         app,
         &updated,
-        &format!("settings poll_interval_secs={}", updated.poll_interval_secs),
+        Some(&format!(
+            "settings poll_interval_secs={}",
+            updated.poll_interval_secs
+        )),
     );
 }
 

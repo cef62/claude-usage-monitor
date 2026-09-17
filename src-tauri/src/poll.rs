@@ -17,6 +17,8 @@ pub const RESET_GRACE: u64 = 5;
 /// Sleep slice; each slice re-renders the tray title so the countdown ticks.
 pub const TITLE_TICK: u64 = 60;
 
+const _: () = assert!(MAX_POLL_SECS <= MAX_BACKOFF);
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Status {
