@@ -38,6 +38,10 @@ export function barColor(percent: number, elapsed: number): BarColor {
   return percent >= 80 ? 'warn' : 'ok';
 }
 
+export function markClass(level: number, levels: number[]): BarColor {
+  return level >= Math.max(...levels) ? 'over' : 'warn';
+}
+
 export function relative(secs: number): string {
   if (secs < 5) return 'just now';
   if (secs < 60) return `${Math.floor(secs)}s ago`;

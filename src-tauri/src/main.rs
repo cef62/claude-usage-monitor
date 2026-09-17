@@ -2,7 +2,7 @@
 
 use claude_usage_monitor::poll::{self, Shared, Snapshot};
 use claude_usage_monitor::tray;
-use claude_usage_monitor::{alerts, settings};
+use claude_usage_monitor::{alerts, log, settings};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_notification::NotificationExt;
@@ -37,13 +37,24 @@ fn quit(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn get_settings(
+    state: State<'_, Arc<Mutex<settings::Settings>>>,
+) -> Result<settings::PopoverSettings, String> {
+    let s = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    Ok(settings::PopoverSettings::from(&*s))
+}
+
 /// Shows one macOS notification per newly crossed threshold. Failures are ignored: the title
 /// marker still tells the story if notifications are denied.
 fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
-    let settings = *app
-        .state::<Mutex<settings::Settings>>()
+    let settings = app
+        .state::<Arc<Mutex<settings::Settings>>>()
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone();
     let now = poll::now();
     let due = {
         let state = app.state::<Mutex<alerts::AlertState>>();
@@ -66,6 +77,15 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
                 tray::countdown(alert.resets_at - now)
             ))
             .show();
+        log::write(
+            app,
+            &format!(
+                "alert {} {} at {}%",
+                alert.key,
+                alert.level,
+                alert.percent.round() as i64
+            ),
+        );
     }
 }
 
@@ -80,7 +100,8 @@ fn main() {
             get_snapshot,
             hide_popover,
             resize_popover,
-            quit
+            quit,
+            get_settings
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
@@ -93,11 +114,16 @@ fn main() {
             let initial = settings::path(app.handle())
                 .map(|p| settings::load(&p))
                 .unwrap_or_default();
-            app.manage(Mutex::new(initial));
+            let settings = Arc::new(Mutex::new(initial));
+            app.manage(settings.clone());
             app.manage(Mutex::new(alerts::AlertState::default()));
             tray::setup(app.handle())?;
+            log::write(
+                app.handle(),
+                &format!("startup v{}", app.package_info().version),
+            );
             let handle = app.handle().clone();
-            poll::run(shared, move |snapshot| {
+            poll::run(shared, settings, log::path(app.handle()), move |snapshot| {
                 tray::refresh_title(&handle, snapshot);
                 notify_thresholds(&handle, snapshot);
                 let _ = handle.emit("usage", snapshot);

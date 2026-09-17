@@ -1,8 +1,11 @@
 //! Poll loop: owns the token for the duration of one request, applies the rate-limit
 //! discipline, and publishes a `Snapshot` for the tray and the popover.
 
+use crate::log;
+use crate::settings::{Settings, MAX_POLL_SECS, MIN_POLL_SECS};
 use crate::usage::{self, FetchError, Quota, USAGE_BASE_URL};
 use serde::Serialize;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -13,6 +16,8 @@ pub const MAX_BACKOFF: u64 = 900;
 pub const RESET_GRACE: u64 = 5;
 /// Sleep slice; each slice re-renders the tray title so the countdown ticks.
 pub const TITLE_TICK: u64 = 60;
+
+const _: () = assert!(MAX_POLL_SECS <= MAX_BACKOFF);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -87,26 +92,58 @@ pub fn next_delay(
     error_count: u32,
     nearest_reset: Option<i64>,
     now: i64,
+    base: u64,
 ) -> u64 {
     match outcome {
         Outcome::Success => match nearest_reset {
-            Some(reset) if reset > now && (reset - now) as u64 + RESET_GRACE < BASE_INTERVAL => {
+            Some(reset) if reset > now && (reset - now) as u64 + RESET_GRACE < base => {
                 ((reset - now) as u64 + RESET_GRACE).max(COOLDOWN)
             }
-            _ => BASE_INTERVAL,
+            _ => base,
         },
         Outcome::Unauthorized | Outcome::Failed => ERROR_RETRY,
         Outcome::RateLimited {
             retry_after: Some(secs),
-        } => (*secs).clamp(BASE_INTERVAL, MAX_BACKOFF),
+        } => (*secs).clamp(base, MAX_BACKOFF),
         Outcome::RateLimited { retry_after: None } => {
             let shift = error_count.saturating_sub(1).min(4);
-            (BASE_INTERVAL << shift).min(MAX_BACKOFF)
+            (base << shift).min(MAX_BACKOFF)
         }
     }
 }
 
-pub fn run<F: Fn(&Snapshot) + Send + 'static>(shared: Shared, on_update: F) {
+/// One line per cycle for the local log. Percentages only; never anything from the request.
+pub fn log_line(outcome: &Outcome, snapshot: &Snapshot, delay: u64) -> String {
+    match &snapshot.status {
+        Status::Ok if matches!(outcome, Outcome::Success) => {
+            let pct = |key: &str| {
+                snapshot
+                    .quotas
+                    .iter()
+                    .find(|q| q.key == key)
+                    .map(|q| format!("{}%", q.percent.round() as i64))
+                    .unwrap_or_else(|| "-".to_string())
+            };
+            format!(
+                "poll ok session={} weekly={} next={delay}s",
+                pct("session"),
+                pct("weekly")
+            )
+        }
+        Status::RateLimited { .. } => format!("poll rate_limited retry={delay}s"),
+        Status::AuthExpired => "poll auth_expired".to_string(),
+        Status::NoToken => "poll no_token".to_string(),
+        Status::Error { message } => format!("poll error {message}"),
+        Status::Ok => format!("poll ok next={delay}s"),
+    }
+}
+
+pub fn run<F: Fn(&Snapshot) + Send + 'static>(
+    shared: Shared,
+    settings: Arc<Mutex<Settings>>,
+    log_path: Option<PathBuf>,
+    on_update: F,
+) {
     std::thread::spawn(move || {
         let client = usage::client();
         let user_agent = usage::user_agent();
@@ -191,7 +228,12 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(shared: Shared, on_update: F) {
                 .map(|q| q.resets_at)
                 .filter(|r| *r > now)
                 .min();
-            let delay = next_delay(&outcome, error_count, nearest_reset, now);
+            let base = settings
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .poll_interval_secs
+                .clamp(MIN_POLL_SECS, MAX_POLL_SECS);
+            let delay = next_delay(&outcome, error_count, nearest_reset, now, base);
             {
                 let mut s = lock(&shared);
                 if let Outcome::RateLimited { .. } = outcome {
@@ -202,6 +244,9 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(shared: Shared, on_update: F) {
                 s.next_poll_at = now + delay as i64;
             }
             on_update(&read(&shared));
+            if let Some(path) = &log_path {
+                let _ = log::append(path, &log_line(&outcome, &read(&shared), delay));
+            }
 
             sleep_ticking(delay, &shared, &on_update);
         }
@@ -216,13 +261,16 @@ mod tests {
 
     #[test]
     fn success_uses_base_interval_without_imminent_reset() {
-        assert_eq!(next_delay(&Outcome::Success, 0, None, NOW), BASE_INTERVAL);
         assert_eq!(
-            next_delay(&Outcome::Success, 0, Some(NOW + 500), NOW),
+            next_delay(&Outcome::Success, 0, None, NOW, BASE_INTERVAL),
             BASE_INTERVAL
         );
         assert_eq!(
-            next_delay(&Outcome::Success, 0, Some(NOW - 10), NOW),
+            next_delay(&Outcome::Success, 0, Some(NOW + 500), NOW, BASE_INTERVAL),
+            BASE_INTERVAL
+        );
+        assert_eq!(
+            next_delay(&Outcome::Success, 0, Some(NOW - 10), NOW, BASE_INTERVAL),
             BASE_INTERVAL
         );
     }
@@ -230,20 +278,23 @@ mod tests {
     #[test]
     fn success_aligns_to_an_imminent_reset() {
         assert_eq!(
-            next_delay(&Outcome::Success, 0, Some(NOW + 60), NOW),
+            next_delay(&Outcome::Success, 0, Some(NOW + 60), NOW, BASE_INTERVAL),
             COOLDOWN
         );
         assert_eq!(
-            next_delay(&Outcome::Success, 0, Some(NOW + 150), NOW),
+            next_delay(&Outcome::Success, 0, Some(NOW + 150), NOW, BASE_INTERVAL),
             150 + RESET_GRACE
         );
     }
 
     #[test]
     fn failures_retry_quickly() {
-        assert_eq!(next_delay(&Outcome::Failed, 3, None, NOW), ERROR_RETRY);
         assert_eq!(
-            next_delay(&Outcome::Unauthorized, 0, None, NOW),
+            next_delay(&Outcome::Failed, 3, None, NOW, BASE_INTERVAL),
+            ERROR_RETRY
+        );
+        assert_eq!(
+            next_delay(&Outcome::Unauthorized, 0, None, NOW, BASE_INTERVAL),
             ERROR_RETRY
         );
     }
@@ -253,19 +304,98 @@ mod tests {
         let rl = |s| Outcome::RateLimited {
             retry_after: Some(s),
         };
-        assert_eq!(next_delay(&rl(10), 1, None, NOW), BASE_INTERVAL);
-        assert_eq!(next_delay(&rl(400), 1, None, NOW), 400);
-        assert_eq!(next_delay(&rl(2000), 1, None, NOW), MAX_BACKOFF);
+        assert_eq!(
+            next_delay(&rl(10), 1, None, NOW, BASE_INTERVAL),
+            BASE_INTERVAL
+        );
+        assert_eq!(next_delay(&rl(400), 1, None, NOW, BASE_INTERVAL), 400);
+        assert_eq!(
+            next_delay(&rl(2000), 1, None, NOW, BASE_INTERVAL),
+            MAX_BACKOFF
+        );
     }
 
     #[test]
     fn rate_limit_backs_off_exponentially_without_retry_after() {
         let rl = Outcome::RateLimited { retry_after: None };
-        assert_eq!(next_delay(&rl, 1, None, NOW), 180);
-        assert_eq!(next_delay(&rl, 2, None, NOW), 360);
-        assert_eq!(next_delay(&rl, 3, None, NOW), 720);
-        assert_eq!(next_delay(&rl, 4, None, NOW), MAX_BACKOFF);
-        assert_eq!(next_delay(&rl, 40, None, NOW), MAX_BACKOFF);
+        assert_eq!(next_delay(&rl, 1, None, NOW, BASE_INTERVAL), 180);
+        assert_eq!(next_delay(&rl, 2, None, NOW, BASE_INTERVAL), 360);
+        assert_eq!(next_delay(&rl, 3, None, NOW, BASE_INTERVAL), 720);
+        assert_eq!(next_delay(&rl, 4, None, NOW, BASE_INTERVAL), MAX_BACKOFF);
+        assert_eq!(next_delay(&rl, 40, None, NOW, BASE_INTERVAL), MAX_BACKOFF);
+    }
+
+    #[test]
+    fn success_uses_the_configured_base() {
+        assert_eq!(next_delay(&Outcome::Success, 0, None, NOW, 300), 300);
+        assert_eq!(
+            next_delay(&Outcome::Success, 0, Some(NOW + 60), NOW, 300),
+            COOLDOWN
+        );
+        assert_eq!(
+            next_delay(&Outcome::Success, 0, Some(NOW + 250), NOW, 300),
+            255
+        );
+    }
+
+    #[test]
+    fn rate_limit_backoff_starts_from_base() {
+        let rl = Outcome::RateLimited { retry_after: None };
+        assert_eq!(next_delay(&rl, 1, None, NOW, 600), 600);
+        assert_eq!(next_delay(&rl, 3, None, NOW, 600), MAX_BACKOFF);
+        let ra = Outcome::RateLimited {
+            retry_after: Some(200),
+        };
+        assert_eq!(next_delay(&ra, 1, None, NOW, 300), 300);
+    }
+
+    #[test]
+    fn log_line_summarizes_the_cycle() {
+        let snap = Snapshot {
+            quotas: vec![
+                Quota {
+                    key: "session".into(),
+                    label: "Session".into(),
+                    percent: 48.4,
+                    resets_at: NOW + 100,
+                    period_secs: 18000,
+                },
+                Quota {
+                    key: "weekly".into(),
+                    label: "Weekly".into(),
+                    percent: 64.0,
+                    resets_at: NOW + 100,
+                    period_secs: 604800,
+                },
+            ],
+            fetched_at: Some(NOW),
+            next_poll_at: NOW + 180,
+            status: Status::Ok,
+        };
+        assert_eq!(
+            log_line(&Outcome::Success, &snap, 180),
+            "poll ok session=48% weekly=64% next=180s"
+        );
+        let mut rl = snap.clone();
+        rl.status = Status::RateLimited { until: NOW + 360 };
+        assert_eq!(
+            log_line(&Outcome::RateLimited { retry_after: None }, &rl, 360),
+            "poll rate_limited retry=360s"
+        );
+        let mut err = snap.clone();
+        err.status = Status::Error {
+            message: "HTTP 500".into(),
+        };
+        assert_eq!(log_line(&Outcome::Failed, &err, 30), "poll error HTTP 500");
+        let mut nt = snap.clone();
+        nt.status = Status::NoToken;
+        assert_eq!(log_line(&Outcome::Failed, &nt, 30), "poll no_token");
+        let mut ae = snap;
+        ae.status = Status::AuthExpired;
+        assert_eq!(
+            log_line(&Outcome::Unauthorized, &ae, 30),
+            "poll auth_expired"
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub session: bool,
@@ -16,6 +16,12 @@ pub struct Settings {
     pub remaining: bool,
     pub alert_session: bool,
     pub alert_weekly: bool,
+    pub show_time_ticks: bool,
+    pub show_elapsed_marker: bool,
+    pub show_threshold_marks: bool,
+    pub session_levels: Vec<u8>,
+    pub weekly_levels: Vec<u8>,
+    pub poll_interval_secs: u64,
 }
 
 impl Default for Settings {
@@ -28,11 +34,17 @@ impl Default for Settings {
             remaining: true,
             alert_session: true,
             alert_weekly: true,
+            show_time_ticks: true,
+            show_elapsed_marker: true,
+            show_threshold_marks: true,
+            session_levels: vec![80, 95],
+            weekly_levels: vec![95],
+            poll_interval_secs: 180,
         }
     }
 }
 
-pub const KEYS: [&str; 7] = [
+pub const KEYS: [&str; 10] = [
     "session",
     "weekly",
     "glyph",
@@ -40,7 +52,15 @@ pub const KEYS: [&str; 7] = [
     "remaining",
     "alert_session",
     "alert_weekly",
+    "show_time_ticks",
+    "show_elapsed_marker",
+    "show_threshold_marks",
 ];
+pub const MIN_POLL_SECS: u64 = 120;
+pub const MAX_POLL_SECS: u64 = 900;
+pub const SESSION_LEVEL_PRESETS: [&[u8]; 3] = [&[80, 95], &[50, 80, 95], &[90, 95]];
+pub const WEEKLY_LEVEL_PRESETS: [&[u8]; 3] = [&[95], &[80, 95], &[90]];
+pub const INTERVAL_PRESETS: [u64; 4] = [180, 300, 600, 900];
 
 impl Settings {
     pub fn get(&self, key: &str) -> bool {
@@ -52,6 +72,9 @@ impl Settings {
             "remaining" => self.remaining,
             "alert_session" => self.alert_session,
             "alert_weekly" => self.alert_weekly,
+            "show_time_ticks" => self.show_time_ticks,
+            "show_elapsed_marker" => self.show_elapsed_marker,
+            "show_threshold_marks" => self.show_threshold_marks,
             _ => false,
         }
     }
@@ -67,6 +90,7 @@ impl Settings {
             "remaining" => self.percent,
             "glyph" => true,
             "alert_session" | "alert_weekly" => true,
+            "show_time_ticks" | "show_elapsed_marker" | "show_threshold_marks" => true,
             _ => return false,
         };
         if self.get(key) && !partner_on {
@@ -80,9 +104,37 @@ impl Settings {
             "remaining" => self.remaining = !self.remaining,
             "alert_session" => self.alert_session = !self.alert_session,
             "alert_weekly" => self.alert_weekly = !self.alert_weekly,
+            "show_time_ticks" => self.show_time_ticks = !self.show_time_ticks,
+            "show_elapsed_marker" => self.show_elapsed_marker = !self.show_elapsed_marker,
+            "show_threshold_marks" => self.show_threshold_marks = !self.show_threshold_marks,
             _ => return false,
         }
         true
+    }
+
+    pub fn levels(&self, key: &str) -> &[u8] {
+        match key {
+            "session" => &self.session_levels,
+            "weekly" => &self.weekly_levels,
+            _ => &[],
+        }
+    }
+
+    /// Replaces a quota's levels. Rejects unknown keys and empty/invalid lists.
+    pub fn set_levels(&mut self, key: &str, levels: &[u8]) -> bool {
+        let Some(clean) = normalize_levels(levels) else {
+            return false;
+        };
+        match key {
+            "session" => self.session_levels = clean,
+            "weekly" => self.weekly_levels = clean,
+            _ => return false,
+        }
+        true
+    }
+
+    pub fn set_poll_interval(&mut self, secs: u64) {
+        self.poll_interval_secs = secs.clamp(MIN_POLL_SECS, MAX_POLL_SECS);
     }
 
     /// Heals a hand-edited file that violates the "at least one of each pair is on" invariant,
@@ -93,6 +145,62 @@ impl Settings {
         }
         if !self.percent && !self.remaining {
             self.percent = true;
+        }
+        self.session_levels =
+            normalize_levels(&self.session_levels).unwrap_or_else(|| vec![80, 95]);
+        self.weekly_levels = normalize_levels(&self.weekly_levels).unwrap_or_else(|| vec![95]);
+        self.poll_interval_secs = self.poll_interval_secs.clamp(MIN_POLL_SECS, MAX_POLL_SECS);
+    }
+}
+
+/// Sorted, deduplicated, 1..=100 only. None when nothing valid remains.
+fn normalize_levels(levels: &[u8]) -> Option<Vec<u8>> {
+    let mut v: Vec<u8> = levels
+        .iter()
+        .copied()
+        .filter(|l| (1..=100).contains(l))
+        .collect();
+    v.sort_unstable();
+    v.dedup();
+    (!v.is_empty()).then_some(v)
+}
+
+pub fn format_levels(levels: &[u8]) -> String {
+    levels
+        .iter()
+        .map(u8::to_string)
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Parses "80,95" (spaces allowed). Any bad token or out-of-range value → None.
+pub fn parse_levels(s: &str) -> Option<Vec<u8>> {
+    let parsed: Option<Vec<u8>> = s.split(',').map(|t| t.trim().parse::<u8>().ok()).collect();
+    let v = parsed?;
+    if v.iter().any(|l| !(1..=100).contains(l)) {
+        return None;
+    }
+    normalize_levels(&v)
+}
+
+/// What the popover needs to draw overlays. A projection, never the whole file.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PopoverSettings {
+    pub session_levels: Vec<u8>,
+    pub weekly_levels: Vec<u8>,
+    pub show_time_ticks: bool,
+    pub show_elapsed_marker: bool,
+    pub show_threshold_marks: bool,
+}
+
+impl From<&Settings> for PopoverSettings {
+    fn from(s: &Settings) -> Self {
+        Self {
+            session_levels: s.session_levels.clone(),
+            weekly_levels: s.weekly_levels.clone(),
+            show_time_ticks: s.show_time_ticks,
+            show_elapsed_marker: s.show_elapsed_marker,
+            show_threshold_marks: s.show_threshold_marks,
         }
     }
 }
@@ -125,7 +233,10 @@ pub fn path(app: &AppHandle) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load, save, Settings, KEYS};
+    use super::{
+        format_levels, load, parse_levels, save, PopoverSettings, Settings, KEYS, MAX_POLL_SECS,
+        MIN_POLL_SECS,
+    };
     use std::path::PathBuf;
 
     fn temp_path(name: &str) -> PathBuf {
@@ -224,7 +335,7 @@ mod tests {
 
     #[test]
     fn alert_keys_toggle_freely() {
-        assert_eq!(KEYS.len(), 7);
+        assert_eq!(KEYS.len(), 10);
         let mut s = Settings::default();
         assert!(s.alert_session && s.alert_weekly);
         assert!(s.toggle("alert_session"));
@@ -243,5 +354,92 @@ mod tests {
         let s = load(&p);
         assert!(!s.weekly);
         assert!(s.alert_session && s.alert_weekly);
+    }
+
+    #[test]
+    fn new_fields_default() {
+        let s = Settings::default();
+        assert_eq!(KEYS.len(), 10);
+        assert!(s.show_time_ticks && s.show_elapsed_marker && s.show_threshold_marks);
+        assert_eq!(s.session_levels, vec![80, 95]);
+        assert_eq!(s.weekly_levels, vec![95]);
+        assert_eq!(s.poll_interval_secs, 180);
+        assert_eq!(s.levels("session"), &[80, 95]);
+        assert_eq!(s.levels("weekly"), &[95]);
+        assert!(s.levels("weekly:fable").is_empty());
+    }
+
+    #[test]
+    fn repair_normalizes_levels_and_interval() {
+        let mut s = Settings::default();
+        s.session_levels = vec![95, 0, 80, 120, 80];
+        s.weekly_levels = vec![];
+        s.poll_interval_secs = 50;
+        s.repair();
+        assert_eq!(s.session_levels, vec![80, 95]);
+        assert_eq!(s.weekly_levels, vec![95]);
+        assert_eq!(s.poll_interval_secs, MIN_POLL_SECS);
+        s.poll_interval_secs = 5000;
+        s.repair();
+        assert_eq!(s.poll_interval_secs, MAX_POLL_SECS);
+    }
+
+    #[test]
+    fn set_levels_and_interval() {
+        let mut s = Settings::default();
+        assert!(s.set_levels("weekly", &[80, 95]));
+        assert_eq!(s.weekly_levels, vec![80, 95]);
+        assert!(!s.set_levels("glyph", &[50]));
+        assert!(!s.set_levels("session", &[]));
+        s.set_poll_interval(10);
+        assert_eq!(s.poll_interval_secs, MIN_POLL_SECS);
+        s.set_poll_interval(600);
+        assert_eq!(s.poll_interval_secs, 600);
+    }
+
+    #[test]
+    fn levels_parse_and_format() {
+        assert_eq!(parse_levels("80,95"), Some(vec![80, 95]));
+        assert_eq!(parse_levels("95, 80"), Some(vec![80, 95]));
+        assert_eq!(parse_levels("x"), None);
+        assert_eq!(parse_levels(""), None);
+        assert_eq!(parse_levels("0,80"), None);
+        assert_eq!(format_levels(&[80, 95]), "80/95");
+        assert_eq!(format_levels(&[95]), "95");
+    }
+
+    #[test]
+    fn overlay_keys_toggle_freely() {
+        let mut s = Settings::default();
+        for k in [
+            "show_time_ticks",
+            "show_elapsed_marker",
+            "show_threshold_marks",
+        ] {
+            assert!(s.toggle(k));
+            assert!(!s.get(k));
+        }
+    }
+
+    #[test]
+    fn popover_projection() {
+        let mut s = Settings::default();
+        s.toggle("show_elapsed_marker");
+        let p = PopoverSettings::from(&s);
+        assert_eq!(p.session_levels, vec![80, 95]);
+        assert!(!p.show_elapsed_marker && p.show_time_ticks);
+        let json = serde_json::to_value(&p).expect("serializes");
+        assert_eq!(json["weekly_levels"], serde_json::json!([95]));
+    }
+
+    #[test]
+    fn old_file_gets_new_defaults() {
+        let p = temp_path("v12-shape");
+        std::fs::create_dir_all(p.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&p, r#"{"alert_session": false}"#).expect("write");
+        let s = load(&p);
+        assert!(!s.alert_session);
+        assert_eq!(s.poll_interval_secs, 180);
+        assert_eq!(s.session_levels, vec![80, 95]);
     }
 }

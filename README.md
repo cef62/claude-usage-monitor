@@ -17,15 +17,25 @@ logged in to Claude Code the menu bar shows `◷ —`; if the token has expired 
 Menu bar format: `◷ 48% ↻2h13m  ·  ▦ 64% ↻3d4h` (session · weekly). ` (429)` after the text
 means the API is rate limiting us and the numbers may be a few minutes old.
 
-Right-click the menu bar item → **Menu bar** to choose what it shows: Session, Weekly, Glyphs
-(`◷` / `▦`), Percent, Remaining time. At least one quota and one of Percent/Remaining always
-stay on. Choices persist in `~/Library/Application Support/com.matteo.claude-usage-monitor/settings.json`.
+## Configuration
 
-**Alerts.** A macOS notification fires when the session quota crosses 80% or 95% and when the
-weekly quota crosses 95%, once per reset window. The 80% alert only fires while usage is ahead of
-the elapsed time (you would hit the cap before the reset). While any alert-enabled quota is at
-95% or more the menu bar shows `⚠`. Turn alerts off per quota under right-click → **Alerts**. macOS asks for
-notification permission the first time.
+Everything lives in the tray right-click menu and persists in
+`~/Library/Application Support/com.matteo.claude-usage-monitor/settings.json`:
+
+- **Menu bar** — Session, Weekly, Glyphs (`◷` / `▦`), Percent, Remaining time. At least one quota
+  and one of Percent/Remaining always stay on.
+- **Popover** — Time ticks (hour/day divisions), Elapsed marker (the white line: how far through
+  the reset window you are), Threshold marks (coloured ticks under the bar at each alert level).
+- **Alerts** — per-quota on/off; **Session levels** `80/95` · `50/80/95` · `90/95`; **Weekly
+  levels** `95` · `80/95` · `90`; **Send test notification**. The highest level always fires and
+  shows `⚠` in the menu bar; lower levels fire only while usage is ahead of the elapsed time. One
+  notification per level per reset window.
+- **Check every** — 3 / 5 / 10 / 15 minutes. Below 120 s the API rate-limits, so that is the floor.
+- **Help → Open log** — reveals `claude-usage-monitor.log` (poll results, alerts, settings
+  changes; never your token). Rotates at 1 MB to `.log.1`. Attach it when reporting a problem.
+
+Hand-editing `settings.json` is fine: `session_levels`/`weekly_levels` accept any 1–100 values,
+`poll_interval_secs` is clamped to 120–900.
 
 ## Development
 
@@ -57,4 +67,4 @@ Security** and click **Open Anyway**, or run
 
 ## Not yet
 
-Threshold notifications, settings, Windows tray icon, launch at login, code signing.
+Windows tray icon, launch at login, code signing.

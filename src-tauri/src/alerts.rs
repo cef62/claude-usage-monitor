@@ -4,10 +4,6 @@ use crate::settings::Settings;
 use crate::usage::Quota;
 use std::collections::HashSet;
 
-pub const SESSION_LEVELS: [u8; 2] = [80, 95];
-pub const WEEKLY_LEVELS: [u8; 1] = [95];
-/// At or above this level the title shows `⚠` and time-aware suppression no longer applies.
-pub const MARKER_LEVEL: u8 = 95;
 const PRUNE_AFTER_SECS: i64 = 86_400;
 /// `resets_at` jitters sub-second between polls (docs/research-usage-monitors.md); anything
 /// within a minute is the same reset window.
@@ -53,12 +49,9 @@ pub fn enabled(settings: &Settings, key: &str) -> bool {
     }
 }
 
-fn levels(key: &str) -> &'static [u8] {
-    match key {
-        "session" => &SESSION_LEVELS,
-        "weekly" => &WEEKLY_LEVELS,
-        _ => &[],
-    }
+/// The highest configured level: `⚠` shows at or above it and it fires regardless of the clock.
+pub fn top(levels: &[u8]) -> Option<u8> {
+    levels.iter().copied().max()
 }
 
 fn label(key: &str) -> &'static str {
@@ -83,18 +76,22 @@ pub fn evaluate(
 
     let mut alerts = Vec::new();
     for q in quotas.iter().filter(|q| enabled(settings, &q.key)) {
+        let levels = settings.levels(&q.key);
+        let Some(top_level) = top(levels) else {
+            continue;
+        };
         let elapsed = elapsed_pct(q, now);
-        let highest = levels(&q.key)
+        let highest = levels
             .iter()
             .copied()
             .filter(|&level| q.percent >= f64::from(level))
-            .filter(|&level| level >= MARKER_LEVEL || q.percent > elapsed)
+            .filter(|&level| level >= top_level || q.percent > elapsed)
             .filter(|&level| !already_fired(state, &q.key, q.resets_at, level))
             .max();
         let Some(highest) = highest else {
             continue;
         };
-        for &level in levels(&q.key).iter().filter(|&&l| l <= highest) {
+        for &level in levels.iter().filter(|&&l| l <= highest) {
             state.fired.insert((q.key.clone(), q.resets_at, level));
         }
         alerts.push(Alert {
@@ -108,11 +105,13 @@ pub fn evaluate(
     alerts
 }
 
-/// True when any alert-enabled quota is at or above the marker level.
+/// True when any alert-enabled quota is at or above the marker level (the highest configured
+/// level, where time-aware suppression no longer applies).
 pub fn marker(quotas: &[Quota], settings: &Settings) -> bool {
-    quotas
-        .iter()
-        .any(|q| enabled(settings, &q.key) && q.percent >= f64::from(MARKER_LEVEL))
+    quotas.iter().any(|q| {
+        enabled(settings, &q.key)
+            && top(settings.levels(&q.key)).is_some_and(|t| q.percent >= f64::from(t))
+    })
 }
 
 #[cfg(test)]
@@ -272,5 +271,50 @@ mod tests {
         assert!(hidden.toggle("weekly"));
         let weekly_high = [quota("weekly", 96.0, 86400, WEEKLY_SECS)];
         assert!(marker(&weekly_high, &hidden));
+    }
+
+    fn with_levels(session: &[u8], weekly: &[u8]) -> Settings {
+        let mut s = Settings::default();
+        assert!(s.set_levels("session", session));
+        assert!(s.set_levels("weekly", weekly));
+        s
+    }
+
+    #[test]
+    fn custom_levels_top_is_unconditional_and_lower_is_time_aware() {
+        let s = with_levels(&[90, 95], &[95]);
+        let mut st = AlertState::default();
+        // 92% with 20 min left (elapsed ~93%): 92 is behind the clock → silent.
+        assert!(evaluate(&mut st, &[session(92.0, 1200)], &s, NOW).is_empty());
+        // 96%: top level fires regardless of the clock.
+        let a = evaluate(&mut st, &[session(96.0, 1800)], &s, NOW);
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].level, 95);
+    }
+
+    #[test]
+    fn single_level_is_the_top() {
+        let s = with_levels(&[95], &[95]);
+        let mut st = AlertState::default();
+        assert!(evaluate(&mut st, &[session(85.0, 7200)], &s, NOW).is_empty());
+        assert_eq!(evaluate(&mut st, &[session(95.0, 60)], &s, NOW).len(), 1);
+    }
+
+    #[test]
+    fn three_levels_fire_the_lowest_first() {
+        let s = with_levels(&[50, 80, 95], &[95]);
+        let mut st = AlertState::default();
+        let a = evaluate(&mut st, &[session(55.0, 3 * 3600)], &s, NOW);
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].level, 50);
+    }
+
+    #[test]
+    fn marker_uses_top_level() {
+        let s = with_levels(&[90, 95], &[95]);
+        assert!(!marker(&[session(92.0, 7200)], &s));
+        assert!(marker(&[session(96.0, 7200)], &s));
+        assert_eq!(top(&[90, 95]), Some(95));
+        assert_eq!(top(&[]), None);
     }
 }

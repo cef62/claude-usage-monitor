@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barColor, clock, countdown, elapsedPct, relative } from '@/lib/format';
+import { barColor, clock, countdown, elapsedPct, markClass, relative } from '@/lib/format';
 import { SESSION_SECS, WEEKLY_SECS } from '@/lib/quota';
 
 // Wed 2026-09-16 14:32 local time.
@@ -56,6 +56,14 @@ describe('barColor', () => {
   it('warns from 80', () => {
     expect(barColor(80, 90)).toBe('warn');
     expect(barColor(79.9, 90)).toBe('ok');
+  });
+});
+
+describe('markClass', () => {
+  it('colours the top level red and the rest amber', () => {
+    expect(markClass(95, [80, 95])).toBe('over');
+    expect(markClass(80, [80, 95])).toBe('warn');
+    expect(markClass(95, [95])).toBe('over');
   });
 });
 
