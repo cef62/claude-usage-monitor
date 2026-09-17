@@ -65,6 +65,76 @@ fn read_blob() -> Option<String> {
     std::fs::read_to_string(format!("{dir}/.credentials.json")).ok()
 }
 
+pub const USAGE_BASE_URL: &str = "https://api.anthropic.com";
+/// Used when `claude --version` is unavailable. Any non-Claude-Code User-Agent has been
+/// permanently rate limited upstream, so the prefix matters more than the exact number.
+const FALLBACK_CLI_VERSION: &str = "2.1.273";
+
+#[derive(Debug, PartialEq)]
+pub enum FetchError {
+    Unauthorized,
+    RateLimited { retry_after: Option<u64> },
+    Server(u16),
+    Network(String),
+}
+
+pub fn user_agent() -> String {
+    let version = std::process::Command::new("claude")
+        .arg("--version")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.split_whitespace().next().map(str::to_string))
+        .filter(|v| v.chars().next().is_some_and(|c| c.is_ascii_digit()))
+        .unwrap_or_else(|| FALLBACK_CLI_VERSION.to_string());
+    format!("claude-code/{version}")
+}
+
+pub fn client() -> reqwest::blocking::Client {
+    reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap_or_else(|_| reqwest::blocking::Client::new())
+}
+
+/// Only the delta-seconds form is honored; an HTTP-date falls back to the caller's backoff.
+pub fn retry_after_secs(header: Option<&str>) -> Option<u64> {
+    header?.trim().parse().ok()
+}
+
+pub fn fetch_usage(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    token: &str,
+    user_agent: &str,
+) -> Result<Value, FetchError> {
+    let resp = client
+        .get(format!("{base_url}/api/oauth/usage"))
+        .header("Authorization", format!("Bearer {token}"))
+        .header("anthropic-beta", "oauth-2025-04-20")
+        .header("Content-Type", "application/json")
+        .header("User-Agent", user_agent)
+        .send()
+        .map_err(|e| FetchError::Network(e.without_url().to_string()))?;
+    match resp.status().as_u16() {
+        200..=299 => resp
+            .json()
+            .map_err(|e| FetchError::Network(e.without_url().to_string())),
+        401 => Err(FetchError::Unauthorized),
+        429 => {
+            let header = resp
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok());
+            Err(FetchError::RateLimited {
+                retry_after: retry_after_secs(header),
+            })
+        }
+        code => Err(FetchError::Server(code)),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Quota {
     /// `session`, `weekly`, or `weekly:<model>` (lowercase display name).
@@ -300,5 +370,26 @@ mod tests {
         assert!(parse_credentials(r#"{"claudeAiOauth":{}}"#).is_none());
         assert!(parse_credentials(r#"{"claudeAiOauth":{"accessToken":""}}"#).is_none());
         assert!(parse_credentials(r#"{"claudeAiOauth":null}"#).is_none());
+    }
+
+    #[test]
+    fn retry_after_parses_seconds_only() {
+        assert_eq!(retry_after_secs(Some("120")), Some(120));
+        assert_eq!(retry_after_secs(Some(" 7 ")), Some(7));
+        assert_eq!(
+            retry_after_secs(Some("Wed, 21 Oct 2026 07:28:00 GMT")),
+            None
+        );
+        assert_eq!(retry_after_secs(None), None);
+    }
+
+    #[test]
+    fn user_agent_has_claude_code_prefix_and_numeric_version() {
+        let ua = user_agent();
+        let version = ua.strip_prefix("claude-code/").expect("prefix");
+        assert!(
+            version.chars().next().is_some_and(|c| c.is_ascii_digit()),
+            "{ua}"
+        );
     }
 }
