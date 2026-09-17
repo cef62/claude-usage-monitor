@@ -31,6 +31,16 @@ pnpm tauri build    # .app and .dmg under src-tauri/target/release/bundle/
 
 The app is unsigned. On first launch, right-click the `.app` and choose Open.
 
+## Releases
+
+Every user-visible change lands with a changeset (`pnpm changeset`). On `main`, the Changesets
+bot keeps a "Version Packages" pull request up to date; merging it bumps `package.json` and
+`src-tauri/tauri.conf.json`, writes `CHANGELOG.md`, and pushes a `vX.Y.Z` tag. The tag builds
+the Apple Silicon app and publishes a GitHub Release with the `.dmg` and `.app.tar.gz`.
+
+Download the latest build from the Releases page. The app is unsigned: right-click the `.app`
+and choose Open on first launch.
+
 ## Not yet
 
 Threshold notifications, settings, Windows tray icon, launch at login, code signing.

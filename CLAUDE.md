@@ -9,8 +9,10 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1 implemented on branch `feat/v1-app` (menu bar text, popover, poll loop). Spec:
-`docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`.
+**Status:** v1 merged to `main`. CI and Changesets-driven releases in place; first release
+`0.1.0` is produced by merging the Version Packages PR. Spec:
+`docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`; pipeline spec:
+`docs/superpowers/specs/2026-09-17-ci-release-design.md`.
 
 ## Reference Material (read before writing code)
 
@@ -122,7 +124,22 @@ pnpm typecheck          # tsc --noEmit
 pnpm test:run           # vitest run
 pnpm verify             # check + typecheck + test:run + cargo fmt --check + cargo clippy -D warnings + cargo test
 pnpm tauri build
+pnpm changeset          # add a changeset for a user-visible change (required in the PR)
 ```
+
+## Versioning and Releases
+
+- **Every user-visible change ships with a changeset** in the same PR (`pnpm changeset`,
+  file under `.changeset/`). Docs-only changes that alter what a user is told to do count.
+- `package.json` is the version source. `pnpm version-packages` runs `changeset version` and
+  `scripts/sync-version.mjs`, which mirrors the version into `src-tauri/tauri.conf.json`.
+  `Cargo.toml` stays `0.0.0`; nothing reads `CARGO_PKG_VERSION`.
+- Workflows: `ci.yml` (verify + build on PRs and `main`), `release.yml` (Changesets action:
+  opens the Version Packages PR; on its merge runs `changeset git-tag`, pushes the tag and
+  dispatches `build-release.yml`), `build-release.yml` (dispatched by `release.yml`, or any
+  manual `v*` tag push: `tauri-action` builds `aarch64-apple-darwin` and publishes the GitHub
+  Release).
+- Never edit versions by hand; never create tags by hand.
 
 ## Code Conventions
 
