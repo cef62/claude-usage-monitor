@@ -13,7 +13,11 @@ export function syncVersion(pkgPath, confPath) {
   // A JSON.parse/stringify round-trip would reformat tauri.conf.json's inline arrays
   // (e.g. "capabilities": ["default"]) onto multiple lines. Replace the version value
   // in place instead, so only that one field changes.
-  const next = raw.replace(/"version"\s*:\s*"[^"]*"/, `"version": "${version}"`);
+  const pattern = /"version"\s*:\s*"[^"]*"/;
+  if (!pattern.test(raw)) {
+    throw new Error(`no "version" field in ${confPath}`);
+  }
+  const next = raw.replace(pattern, `"version": "${version}"`);
   writeFileSync(confPath, next);
   return version;
 }

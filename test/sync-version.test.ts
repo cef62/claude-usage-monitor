@@ -35,4 +35,37 @@ describe('syncVersion', () => {
     writeFileSync(pkg, '{"name":"x"}\n');
     expect(() => syncVersion(pkg, conf)).toThrow(/version/);
   });
+
+  it('substitutes only the version value, leaving arrays and nested objects untouched', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sync-version-'));
+    const pkg = join(dir, 'package.json');
+    const conf = join(dir, 'tauri.conf.json');
+    writeFileSync(pkg, `${JSON.stringify({ name: 'x', version: '1.2.3' }, null, 2)}\n`);
+    const original = [
+      '{',
+      '  "productName": "X",',
+      '  "version": "0.0.0",',
+      '  "app": {',
+      '    "security": {',
+      '      "capabilities": ["default"]',
+      '    }',
+      '  }',
+      '}',
+      '',
+    ].join('\n');
+    writeFileSync(conf, original);
+
+    syncVersion(pkg, conf);
+
+    const expected = original.replace('"version": "0.0.0"', '"version": "1.2.3"');
+    expect(readFileSync(conf, 'utf8')).toBe(expected);
+  });
+
+  it('throws when tauri.conf.json has no version field', () => {
+    const { pkg } = fixture('1.0.0', '1.0.0');
+    const dir = mkdtempSync(join(tmpdir(), 'sync-version-'));
+    const conf = join(dir, 'tauri.conf.json');
+    writeFileSync(conf, `${JSON.stringify({ productName: 'X', build: {} }, null, 2)}\n`);
+    expect(() => syncVersion(pkg, conf)).toThrow(/version/);
+  });
 });
