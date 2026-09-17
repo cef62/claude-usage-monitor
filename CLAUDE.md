@@ -9,10 +9,11 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1.1 (menu bar settings, ad-hoc signing) implemented; released via the Changesets pipeline.
+**Status:** v1.2 (threshold alerts) implemented; released via the Changesets pipeline.
 Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 `docs/superpowers/specs/2026-09-17-ci-release-design.md`,
-`docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`.
+`docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`,
+`docs/superpowers/specs/2026-09-17-threshold-alerts-design.md`.
 
 ## Reference Material (read before writing code)
 
@@ -61,6 +62,7 @@ src-tauri/
   src/poll.rs              poll loop, backoff, cooldown state machine
   src/tray.rs              tray icon, menu, title text, popover positioning
   src/settings.rs          menu bar display settings, JSON in app_data_dir
+  src/alerts.rs            threshold alert state machine (pure)
   icons/
 test/                      Vitest specs for src/lib
 ```
@@ -97,7 +99,8 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
 - Capabilities are an allowlist in `src-tauri/capabilities/default.json`. Grant the minimum.
   A missing capability fails silently in the webview — check there first when an `invoke`
   rejects for no reason. `opener:allow-open-url` needs an explicit `allow: [{url: "https://*"}]`
-  scope or it opens nothing.
+  scope or it opens nothing. Notifications are sent from Rust (`tauri-plugin-notification`),
+  which needs no capability entry; the macOS permission prompt is OS-level.
 - External links (Claude settings/usage pages) open via `plugin:opener|open_url`, never by
   navigating the webview.
 - Call plugin commands directly with `invoke('plugin:<name>|<cmd>')` from `src/lib/ipc.ts`

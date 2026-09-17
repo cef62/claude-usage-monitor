@@ -1,10 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use claude_usage_monitor::poll::{self, Shared, Snapshot};
-use claude_usage_monitor::settings;
 use claude_usage_monitor::tray;
+use claude_usage_monitor::{alerts, settings};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
+use tauri_plugin_notification::NotificationExt;
 
 #[tauri::command]
 fn get_snapshot(state: State<'_, Shared>) -> Result<Snapshot, String> {
@@ -36,11 +37,44 @@ fn quit(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Shows one macOS notification per newly crossed threshold. Failures are ignored: the title
+/// marker still tells the story if notifications are denied.
+fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
+    let settings = *app
+        .state::<Mutex<settings::Settings>>()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let now = poll::now();
+    let due = {
+        let state = app.state::<Mutex<alerts::AlertState>>();
+        let mut state = state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        alerts::evaluate(&mut state, &snapshot.quotas, &settings, now)
+    };
+    for alert in due {
+        let _ = app
+            .notification()
+            .builder()
+            .title(format!(
+                "Claude usage: {} {}%",
+                alert.label,
+                alert.percent.round() as i64
+            ))
+            .body(format!(
+                "Resets in {}",
+                tray::countdown(alert.resets_at - now)
+            ))
+            .show();
+    }
+}
+
 fn main() {
     let shared: Shared = Arc::new(Mutex::new(Snapshot::default()));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
@@ -60,10 +94,12 @@ fn main() {
                 .map(|p| settings::load(&p))
                 .unwrap_or_default();
             app.manage(Mutex::new(initial));
+            app.manage(Mutex::new(alerts::AlertState::default()));
             tray::setup(app.handle())?;
             let handle = app.handle().clone();
             poll::run(shared, move |snapshot| {
                 tray::refresh_title(&handle, snapshot);
+                notify_thresholds(&handle, snapshot);
                 let _ = handle.emit("usage", snapshot);
             });
             Ok(())

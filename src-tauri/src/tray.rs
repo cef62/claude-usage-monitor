@@ -1,5 +1,6 @@
 //! Tray icon, its title text, the right-click menu, and popover placement.
 
+use crate::alerts;
 use crate::poll::{self, Snapshot, Status};
 use crate::settings::{self, Settings, KEYS};
 use std::collections::HashMap;
@@ -19,13 +20,38 @@ pub const SEPARATOR: &str = "  ·  ";
 /// Check items of the "Menu bar" submenu, kept so the handler can re-sync check marks.
 pub struct MenuItems(pub HashMap<String, CheckMenuItem<Wry>>);
 
-const LABELS: [(&str, &str); 5] = [
+const DISPLAY_LABELS: [(&str, &str); 5] = [
     ("session", "Session"),
     ("weekly", "Weekly"),
     ("glyph", "Glyphs"),
     ("percent", "Percent"),
     ("remaining", "Remaining time"),
 ];
+
+const ALERT_LABELS: [(&str, &str); 2] = [("alert_session", "Session"), ("alert_weekly", "Weekly")];
+
+fn check_submenu(
+    app: &AppHandle,
+    text: &str,
+    labels: &[(&str, &str)],
+    current: &Settings,
+    items: &mut HashMap<String, CheckMenuItem<Wry>>,
+) -> tauri::Result<tauri::menu::Submenu<Wry>> {
+    let mut submenu = SubmenuBuilder::new(app, text);
+    for (key, label) in labels {
+        let item = CheckMenuItem::with_id(
+            app,
+            format!("set:{key}"),
+            *label,
+            true,
+            current.get(key),
+            None::<&str>,
+        )?;
+        submenu = submenu.item(&item);
+        items.insert((*key).to_string(), item);
+    }
+    submenu.build()
+}
 
 pub fn countdown(secs: i64) -> String {
     if secs < 60 {
@@ -79,7 +105,12 @@ pub fn title(s: &Snapshot, now: i64, settings: &Settings) -> String {
         if settings.weekly {
             halves.push(half(s, "weekly", WEEKLY_GLYPH, now, settings));
         }
-        format!(" {}", halves.join(SEPARATOR))
+        let warn = if alerts::marker(&s.quotas, settings) {
+            "⚠ "
+        } else {
+            ""
+        };
+        format!(" {warn}{}", halves.join(SEPARATOR))
     };
     match s.status {
         Status::Ok => numbers(),
@@ -106,25 +137,14 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
     let mut items = HashMap::new();
-    let mut submenu = SubmenuBuilder::new(app, "Menu bar");
-    for (key, label) in LABELS {
-        let item = CheckMenuItem::with_id(
-            app,
-            format!("set:{key}"),
-            label,
-            true,
-            current.get(key),
-            None::<&str>,
-        )?;
-        submenu = submenu.item(&item);
-        items.insert(key.to_string(), item);
-    }
-    let submenu = submenu.build()?;
+    let display = check_submenu(app, "Menu bar", &DISPLAY_LABELS, &current, &mut items)?;
+    let alerts_menu = check_submenu(app, "Alerts", &ALERT_LABELS, &current, &mut items)?;
     app.manage(MenuItems(items));
 
     let menu = MenuBuilder::new(app)
         .item(&open)
-        .item(&submenu)
+        .item(&display)
+        .item(&alerts_menu)
         .separator()
         .item(&quit)
         .build()?;
@@ -348,6 +368,42 @@ mod tests {
             ),
             " ◷ 48% ↻2h13m  ·  ▦ 64% ↻3d4h (429)"
         );
+    }
+
+    #[test]
+    fn title_marks_alerting_quota_at_95() {
+        let s = snapshot(
+            Status::Ok,
+            vec![
+                quota("session", 96.0, 2 * 3600 + 13 * 60, SESSION_SECS),
+                quota("weekly", 64.0, 3 * 86400 + 4 * 3600 + 20 * 60, WEEKLY_SECS),
+            ],
+        );
+        assert_eq!(
+            title(&s, NOW, &Settings::default()),
+            " ⚠ ◷ 96% ↻2h13m  ·  ▦ 64% ↻3d4h"
+        );
+        assert_eq!(
+            title(
+                &snapshot(Status::RateLimited { until: NOW + 900 }, s.quotas.clone()),
+                NOW,
+                &Settings::default()
+            ),
+            " ⚠ ◷ 96% ↻2h13m  ·  ▦ 64% ↻3d4h (429)"
+        );
+        assert_eq!(
+            title(&s, NOW, &with(&["alert_session"])),
+            " ◷ 96% ↻2h13m  ·  ▦ 64% ↻3d4h"
+        );
+    }
+
+    #[test]
+    fn title_marker_ignores_status_strings() {
+        let s = snapshot(
+            Status::AuthExpired,
+            vec![quota("session", 99.0, 600, SESSION_SECS)],
+        );
+        assert_eq!(title(&s, NOW, &Settings::default()), " ◷ ! login");
     }
 
     #[test]

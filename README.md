@@ -21,6 +21,12 @@ Right-click the menu bar item → **Menu bar** to choose what it shows: Session,
 (`◷` / `▦`), Percent, Remaining time. At least one quota and one of Percent/Remaining always
 stay on. Choices persist in `~/Library/Application Support/com.matteo.claude-usage-monitor/settings.json`.
 
+**Alerts.** A macOS notification fires when the session quota crosses 80% or 95% and when the
+weekly quota crosses 95%, once per reset window. The 80% alert only fires while usage is ahead of
+the elapsed time (you would hit the cap before the reset). While any alert-enabled quota is at
+95% or more the menu bar shows `⚠`. Turn alerts off per quota under right-click → **Alerts**. macOS asks for
+notification permission the first time.
+
 ## Development
 
 Requires Node 24+, pnpm 12, and a Rust stable toolchain (`rustup`).
