@@ -14,6 +14,8 @@ pub struct Settings {
     pub glyph: bool,
     pub percent: bool,
     pub remaining: bool,
+    pub alert_session: bool,
+    pub alert_weekly: bool,
 }
 
 impl Default for Settings {
@@ -24,11 +26,21 @@ impl Default for Settings {
             glyph: true,
             percent: true,
             remaining: true,
+            alert_session: true,
+            alert_weekly: true,
         }
     }
 }
 
-pub const KEYS: [&str; 5] = ["session", "weekly", "glyph", "percent", "remaining"];
+pub const KEYS: [&str; 7] = [
+    "session",
+    "weekly",
+    "glyph",
+    "percent",
+    "remaining",
+    "alert_session",
+    "alert_weekly",
+];
 
 impl Settings {
     pub fn get(&self, key: &str) -> bool {
@@ -38,12 +50,15 @@ impl Settings {
             "glyph" => self.glyph,
             "percent" => self.percent,
             "remaining" => self.remaining,
+            "alert_session" => self.alert_session,
+            "alert_weekly" => self.alert_weekly,
             _ => false,
         }
     }
 
     /// Flips `key`. Returns false and changes nothing when the flip would disable the last
     /// enabled member of a pair (session/weekly, percent/remaining) or the key is unknown.
+    /// `glyph`, `alert_session`, and `alert_weekly` have no partner and can be freely toggled.
     pub fn toggle(&mut self, key: &str) -> bool {
         let partner_on = match key {
             "session" => self.weekly,
@@ -51,6 +66,7 @@ impl Settings {
             "percent" => self.remaining,
             "remaining" => self.percent,
             "glyph" => true,
+            "alert_session" | "alert_weekly" => true,
             _ => return false,
         };
         if self.get(key) && !partner_on {
@@ -62,6 +78,8 @@ impl Settings {
             "glyph" => self.glyph = !self.glyph,
             "percent" => self.percent = !self.percent,
             "remaining" => self.remaining = !self.remaining,
+            "alert_session" => self.alert_session = !self.alert_session,
+            "alert_weekly" => self.alert_weekly = !self.alert_weekly,
             _ => return false,
         }
         true
@@ -202,5 +220,28 @@ mod tests {
         let s = load(&p);
         assert!(!s.glyph);
         assert!(s.session && s.weekly && s.percent && s.remaining);
+    }
+
+    #[test]
+    fn alert_keys_toggle_freely() {
+        assert_eq!(KEYS.len(), 7);
+        let mut s = Settings::default();
+        assert!(s.alert_session && s.alert_weekly);
+        assert!(s.toggle("alert_session"));
+        assert!(s.toggle("alert_weekly"));
+        assert!(!s.get("alert_session") && !s.get("alert_weekly"));
+        assert!(s.toggle("alert_weekly"));
+        assert!(s.alert_weekly);
+    }
+
+    #[test]
+    fn load_file_without_alert_fields_defaults_them_on() {
+        let p = temp_path("old-shape");
+        std::fs::create_dir_all(p.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&p, r#"{"session": true, "weekly": false, "glyph": true, "percent": true, "remaining": true}"#)
+            .expect("write");
+        let s = load(&p);
+        assert!(!s.weekly);
+        assert!(s.alert_session && s.alert_weekly);
     }
 }
