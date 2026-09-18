@@ -9,21 +9,50 @@ permissions:
   contents: write
 
 jobs:
-  macos:
-    runs-on: macos-latest
+  # One job owns the GitHub Release so the platform builds never race to create it and a
+  # failure on one platform does not block the other's assets.
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.release.outputs.id }}
     steps:
-      - uses: actions/checkout@v4
+      - id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
+            --title "Claude Usage Monitor $TAG" \
+            --notes "See CHANGELOG.md for details. macOS: the app is ad-hoc signed, not notarized: on first launch open System Settings → Privacy & Security and click Open Anyway, or run \`xattr -cr \"/Applications/Claude Usage Monitor.app\"\` once. Windows: the installer is unsigned. When SmartScreen appears, click More info → Run anyway."
+          echo "id=$(gh release view "$TAG" --json databaseId -q .databaseId)" >> "$GITHUB_OUTPUT"
 
-      - uses: pnpm/action-setup@v4
+  build:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc --bundles nsis
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -35,45 +64,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Claude Usage Monitor ${{ github.ref_name }}"
-          releaseBody: "See CHANGELOG.md for details. macOS: the app is ad-hoc signed, not notarized: on first launch open System Settings → Privacy & Security and click Open Anyway, or run `xattr -cr \"/Applications/Claude Usage Monitor.app\"` once. Windows: the installer is unsigned. When SmartScreen appears, click More info → Run anyway."
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.id }}
           includeUpdaterJson: false
-          args: --target aarch64-apple-darwin
-
-  windows:
-    needs: macos
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - run: pnpm install --frozen-lockfile
-
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Claude Usage Monitor ${{ github.ref_name }}"
-          releaseBody: "See CHANGELOG.md for details. macOS: the app is ad-hoc signed, not notarized: on first launch open System Settings → Privacy & Security and click Open Anyway, or run `xattr -cr \"/Applications/Claude Usage Monitor.app\"` once. Windows: the installer is unsigned. When SmartScreen appears, click More info → Run anyway."
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: false
-          args: --target x86_64-pc-windows-msvc --bundles nsis
+          args: ${{ matrix.args }}
