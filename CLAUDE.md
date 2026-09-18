@@ -9,7 +9,7 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1.4 (Windows system tray) implemented; released via the Changesets pipeline.
+**Status:** v1.5 (launch at login) implemented; released via the Changesets pipeline.
 Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 `docs/superpowers/specs/2026-09-17-ci-release-design.md`,
 `docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`,
@@ -30,8 +30,10 @@ Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 ## Tech Stack
 
 - Tauri 2 (`tauri`, `tauri-build`, `@tauri-apps/api`). Plugins only when a native feature needs
-  them: `tauri-plugin-opener` for external links (see Tauri Rules), `tray-icon` feature for the
-  menu bar / tray.
+  them: `tauri-plugin-opener` for external links (see Tauri Rules), `tauri-plugin-notification`
+  for alerts, `tauri-plugin-autostart` (LaunchAgent / HKCU Run) for "Start at login" — the OS is
+  the only source of truth, nothing in `settings.json` — and the `tray-icon` feature for the menu
+  bar / tray.
 - Rust stable, edition 2021. `reqwest` (rustls, native certs so corporate proxies work) +
   `serde`/`serde_json` for the usage API. Keep the usage JSON as `serde_json::Value` at the
   edge and normalize into a small typed struct — the API adds code-named fields without notice.
