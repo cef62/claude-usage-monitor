@@ -134,9 +134,8 @@ console flashes. Credentials already fall back to `%CLAUDE_CONFIG_DIR%\.credenti
 
 ### `tauri.conf.json`
 
-- Popover window gains `"skipTaskbar": true` (no taskbar button on Windows; ignored on macOS).
-- `bundle.targets` stays `["app", "dmg", "nsis"]`; add `"windows": { "nsis": { "installMode":
-  "currentUser" } }` so the installer needs no admin prompt.
+- Popover window already has `"skipTaskbar": true` (no taskbar button on Windows). `bundle.targets`
+  already lists `nsis`; NSIS `installMode` defaults to `currentUser` (no admin prompt). No change.
 
 ### CI/release
 
@@ -145,9 +144,9 @@ console flashes. Credentials already fall back to `%CLAUDE_CONFIG_DIR%\.credenti
   x86_64-pc-windows-msvc`, then `actions/upload-artifact@v4` of
   `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe` named
   `windows-installer` (retention 7 days). This artifact is the manual-test build.
-- `build-release.yml`: job becomes a matrix `{ os: macos-latest, target: aarch64-apple-darwin,
-  bundles: app,dmg } | { os: windows-latest, target: x86_64-pc-windows-msvc, bundles: nsis }`.
-  `tauri-action` on both uploads to the same tag; `releaseBody` adds: "Windows: the installer is
+- `build-release.yml`: second job `windows` (`needs: macos`, so the two `tauri-action` runs never
+  race to create the release) on `windows-latest` with target `x86_64-pc-windows-msvc` and
+  `--bundles nsis`; it uploads to the same tag; `releaseBody` on both adds: "Windows: the installer is
   unsigned. When SmartScreen appears, click More info → Run anyway."
 - Windows runners already ship WebView2 and NSIS is downloaded by `tauri-action`; no extra setup
   step.
@@ -167,10 +166,11 @@ Rust, inline `#[cfg(test)]`:
 
 - `icon::bar_color`: `(48, 60) → OK`, `(85, 60) → OVER` (ahead of clock), `(85, 90) → WARN`,
   `(100, 100) → OVER`.
-- `icon::render` with the `both()` fixture from `tray` tests (session 48.4 %, weekly 64 %, both
-  behind the clock): pixel `(3, 8)` is `OK`, pixel `(3 + 12, 8)` is `OK` (fill = round(26×0.484)
-  = 13 px → x 3..=15), pixel `(16, 8)` is `TRACK`; weekly row `(3 + 16, 20)` is `OK`,
-  `(20, 20)` is `TRACK`; corner `(0, 0)` is transparent.
+- `icon::render` with session 48.4 % resetting in 2 h 13 m (elapsed 56 %) and weekly 40 %
+  resetting in 3 d (elapsed 57 %), both behind the clock: pixel `(3, 8)` is `OK`, pixel `(15, 8)`
+  is `OK` (fill = round(26×0.484) = 13 px → x 3..=15), pixel `(16, 8)` is `TRACK`; weekly row
+  `(12, 20)` is `OK` (round(26×0.4) = 10 px → x 3..=12), `(13, 20)` is `TRACK`; corner `(0, 0)` is
+  transparent.
 - Hidden weekly → row 8 is transparent, row 15 has the session bar.
 - `alerts::marker` true (session 96 %, alerts on) → `(0, 0)` and `(31, 31)` are `OVER`.
 - `Status::NoToken` → `(16, 16)` is `OVER`, bar fills are `IDLE`.
