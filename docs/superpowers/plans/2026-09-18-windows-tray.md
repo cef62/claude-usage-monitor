@@ -4,7 +4,7 @@
 
 **Goal:** Run the app on Windows with a two-bar tray icon plus tooltip, the existing menu and popover, and an unsigned x64 NSIS installer built and released by CI.
 
-**Architecture:** A new pure module `icon.rs` renders the 32×32 RGBA tray icon from `Snapshot` + `Settings`. `tray::refresh` (renamed from `refresh_title`) forks once on `cfg(target_os)`: macOS sets the title, everything else sets tooltip + icon. `popover_origin` learns to place the window above a bottom taskbar, and a 250 ms blur guard stops the Windows focus-steal from reopening a popover the tray click just closed. `usage::user_agent` spawns `cmd /C claude --version` on Windows. CI gains a Windows verify+bundle job; the release workflow gains a sequential Windows job.
+**Architecture:** A new pure module `icon.rs` renders the 32×32 RGBA tray icon from `Snapshot` + `Settings`. `tray::refresh` (renamed from `refresh_title`) forks once on `cfg(target_os)`: macOS sets the title, everything else sets tooltip + icon. `popover_origin` learns to place the window above a bottom taskbar, and a 400 ms blur guard stops the Windows focus-steal from reopening a popover the tray click just closed. `usage::user_agent` spawns `cmd /C claude --version` on Windows. CI gains a Windows verify+bundle job; the release workflow gains a sequential Windows job.
 
 **Tech Stack:** Tauri 2.11 (`tray-icon`, `tauri::image::Image::new_owned`), Rust stable, GitHub Actions `windows-latest`, `tauri-apps/tauri-action@v0`, NSIS.
 
@@ -590,7 +590,7 @@ Replace the existing `popover_is_centered_under_the_icon` test in `src-tauri/src
     }
 
     #[test]
-    fn blur_guard_only_covers_the_first_250ms() {
+    fn blur_guard_only_covers_the_first_400ms() {
         let now = Instant::now();
         assert!(!blur_guard_active(None, now));
         assert!(blur_guard_active(Some(now - Duration::from_millis(100)), now));
@@ -633,7 +633,7 @@ pub fn popover_origin(
 
 /// Clicking the tray icon on Windows first steals focus from the popover, which hides it, and
 /// then delivers the click, which would show it again. Ignore shows this soon after a blur-hide.
-pub const BLUR_GUARD: Duration = Duration::from_millis(250);
+pub const BLUR_GUARD: Duration = Duration::from_millis(400);
 
 /// When the popover was last hidden because it lost focus.
 pub struct HiddenAt(pub Mutex<Option<Instant>>);
@@ -944,7 +944,7 @@ git push
 gh pr create --base main --head feat/windows-tray --title "feat: Windows system tray" --body "$(cat <<'EOF'
 ## Summary
 - Windows tray icon: two bars (session / weekly) rendered in raw RGBA, alert frame, sign-in square; tooltip carries the macOS title text
-- Popover opens above a bottom taskbar; 250 ms blur guard so a tray click closes an open popover
+- Popover opens above a bottom taskbar; 400 ms blur guard so a tray click closes an open popover
 - `claude --version` spawned through `cmd /C` on Windows (`.cmd` shim), no console flash
 - CI: `verify-windows` job (verify + NSIS bundle, `windows-installer` artifact); release adds a sequential Windows job publishing the unsigned x64 `-setup.exe`
 - Docs + changeset (minor)

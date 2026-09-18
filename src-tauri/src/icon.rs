@@ -45,6 +45,8 @@ impl Canvas {
     }
 
     fn fill(&mut self, x: u32, y: u32, w: u32, h: u32, color: [u8; 4]) {
+        // Every caller passes fixed constants; a bad constant should fail a test, not a user.
+        debug_assert!(x + w <= SIZE && y + h <= SIZE, "fill outside the canvas");
         for yy in y..y + h {
             for xx in x..x + w {
                 let i = ((yy * SIZE + xx) * 4) as usize;

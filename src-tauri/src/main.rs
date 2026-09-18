@@ -120,7 +120,8 @@ fn main() {
             get_settings
         ])
         .on_window_event(|window, event| {
-            if let WindowEvent::Focused(false) = event {
+            // Only the popover auto-hides on blur; any future window keeps its focus behaviour.
+            if window.label() == "popover" && matches!(event, WindowEvent::Focused(false)) {
                 let _ = window.hide();
                 if let Some(hidden) = window.app_handle().try_state::<tray::HiddenAt>() {
                     *hidden.0.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
