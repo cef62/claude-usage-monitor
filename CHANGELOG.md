@@ -1,5 +1,15 @@
 # claude-usage-monitor
 
+## 0.6.0
+
+### Minor Changes
+
+- 530d91f: "Start at login" check item in the tray menu (macOS login item via LaunchAgent, Windows Run key); off by default, the OS state is the source of truth.
+
+### Patch Changes
+
+- 3bac3b2: README rewritten around install / use / configure with a Releases link and acknowledgements; added CONTRIBUTING.md and the MIT license.
+
 ## 0.5.0
 
 ### Minor Changes
