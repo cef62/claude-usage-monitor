@@ -115,8 +115,9 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
   the frontend needs camelCase, and then everywhere).
 - Push state to the frontend with events (`app.emit`) from the poll loop; the frontend does not
   poll the backend on a timer.
-- OS-specific code behind `#[cfg(target_os = "...")]`. The only platform fork in the tray is
-  `tray::refresh` (macOS: title; elsewhere: tooltip + `icon::render`). Spawn `claude` through
+- OS-specific code behind `#[cfg(target_os = "...")]`. The platform forks in the tray are
+  `tray::refresh` (macOS: title; elsewhere: tooltip + `icon::render`), `DISPLAY_MENU_LABEL`, and
+  the startup icon seed in `tray::setup`. Spawn `claude` through
   `cmd /C` on Windows (it is a `.cmd` shim) with `CREATE_NO_WINDOW`.
 - Release profile: `opt-level = "s"`, `lto = true`, `codegen-units = 1`, `strip = true`,
   `panic = "abort"`. `main.rs` starts with

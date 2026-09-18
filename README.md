@@ -21,8 +21,9 @@ means the API is rate limiting us and the numbers may be a few minutes old.
 On Windows the tray shows no text, so the icon carries the numbers: the top bar is the session
 quota, the bottom bar the weekly quota, green while behind the clock, amber from 80 %, red when
 ahead of the clock or full. A red frame means an alert level has been reached; a red square in
-the middle means you need to run `claude auth login`. Hover the icon for the same text macOS
-shows in the menu bar. The token is read from `%USERPROFILE%\.claude\.credentials.json`
+the middle means you need to run `claude auth login`. Grey bars with no square mean the last
+check failed (`! err` in the tooltip); the app retries on its own. Hover the icon for the same
+text macOS shows in the menu bar. The token is read from `%USERPROFILE%\.claude\.credentials.json`
 (`%CLAUDE_CONFIG_DIR%` if set).
 
 ## Configuration
@@ -77,7 +78,7 @@ Security** and click **Open Anyway**, or run
 `xattr -cr "/Applications/Claude Usage Monitor.app"` once.
 
 On Windows the installer is unsigned: when SmartScreen appears, click **More info → Run anyway**.
-It installs per user (no admin prompt) and needs the WebView2 runtime, which Windows 10/11 ship.
+It installs per user (no admin prompt) and needs the WebView2 runtime; the installer fetches it if it is missing.
 
 ## Not yet
 

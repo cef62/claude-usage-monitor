@@ -17,7 +17,7 @@ installer built by CI and attached to every release. macOS behaviour stays byte-
 | Verification | CI compiles and bundles; the user installs the CI artifact on a Windows machine and reports |
 | Platform split | One new pure module `icon.rs`; one `cfg(target_os)` fork in `tray::refresh`; everything else shared |
 | Popover placement | Above the icon when the tray sits in the lower half of the monitor (Windows taskbar), below otherwise (macOS menu bar); clamped to the monitor |
-| Blur race | A show requested within 250 ms of a blur-hide is ignored, so a tray click closes an open popover on Windows |
+| Blur race | A show requested within 400 ms of a blur-hide is ignored, so a tray click closes an open popover on Windows |
 
 ## Out of scope
 
@@ -84,30 +84,42 @@ Layout (all in pixels of the 32×32 canvas):
 - `after_settings_change` already calls `refresh_title`; renamed call. Toggling Session/Weekly
   therefore re-draws the icon.
 - Initial icon: `TrayIconBuilder::icon(...)` keeps `icons/tray.png` on macOS (template glyph);
-  on Windows `setup` sets the rendered icon of the initial empty snapshot (tracks only) so the
-  black template never shows on a dark taskbar. Same `cfg` pattern as above, inside `setup`.
+  on Windows `setup` sets the rendered icon of `Snapshot::default()` (grey tracks plus the
+  sign-in square, matching the macOS `◷ —` startup title) until the first poll, so the black
+  template never shows on a dark taskbar. Same `cfg` pattern as above, inside `setup`.
 - Menu label: the display submenu is `"Menu bar"` on macOS, `"Tray"` elsewhere
   (`const DISPLAY_MENU_LABEL: &str`, `cfg`-selected). Item ids unchanged.
-- `popover_origin(rect, scale, width, height, monitor) -> LogicalPosition<f64>` where `monitor`
-  is `LogicalSize<f64>` of the monitor that contains the icon:
-  - `x = clamp(rect.center_x − width/2, 0, monitor.width − width)`.
-  - `y = rect.y + rect.height + POPOVER_GAP` when `rect.center_y < monitor.height / 2`
-    (menu bar at top); else `y = rect.y − POPOVER_GAP − height` (taskbar at bottom).
+- `popover_origin(rect, scale, width, height, monitor: Area) -> LogicalPosition<f64>` where
+  `Area { x, y, width, height }` is the containing monitor in logical pixels with its global
+  origin (the tray rect is in global screen coordinates, so a second display has a non-zero
+  origin):
+  - `x = clamp(rect.center_x − width/2, monitor.x, monitor.x + monitor.width − width)`.
+  - `y = rect.y + rect.height + POPOVER_GAP` when `rect.center_y < monitor.y + monitor.height / 2`
+    (menu bar at top); else `y = rect.y − POPOVER_GAP − height` (taskbar at bottom); then
+    `y = max(y, monitor.y)`.
   - `height` is the popover's current outer height (`window.outer_size()` to logical), so the
     window's bottom edge sits `POPOVER_GAP` above the icon.
-- `toggle_popover`: reads `window.current_monitor()` (fallback: `primary_monitor()`, then a
-  1920×1080 logical size) and passes its logical size. Before showing, checks the blur guard
-  below.
+- Monitor selection (`tray::place`): the first of `app.available_monitors()` whose physical
+  rectangle (`position()` + `size()`) contains the icon's centre, converting the rect to physical
+  pixels with that monitor's scale factor. Not `monitor_from_point`: tao takes logical points on
+  macOS but physical pixels on Windows. Fallback: `window.current_monitor()`, then
+  `primary_monitor()`, then a 1920×1080 area at the origin with the window's scale factor.
+- `toggle_popover`: stores the rect in `LastTrayRect`, calls `place`, then shows and focuses.
+  Before showing, checks the blur guard below.
 
 ### Blur guard (`main.rs` + `tray.rs`)
 
 - Managed state `pub struct HiddenAt(pub Mutex<Option<Instant>>)`.
 - `on_window_event` `Focused(false)`: hide, then store `Instant::now()`.
-- `toggle_popover`: if the popover is hidden and `HiddenAt` is within `BLUR_GUARD = 250 ms`, do
+- `toggle_popover`: if the popover is hidden and `HiddenAt` is within `BLUR_GUARD = 400 ms`, do
   nothing (the click that stole focus already closed it). Pure helper
   `fn blur_guard_active(hidden_at: Option<Instant>, now: Instant) -> bool` for the test.
 - Same code on both platforms; on macOS the tray click does not blur the popover first, so the
   guard never triggers.
+- Managed state `pub struct LastTrayRect(pub Mutex<Option<Rect>>)`, written by `toggle_popover`.
+  `resize_popover` (`main.rs`) calls `set_size`, which keeps the top-left corner, so a popover
+  above a Windows taskbar would grow down over it; after resizing it re-runs `tray::place` with
+  the stored rect. On macOS the origin does not depend on height, so this is a no-op.
 
 ### `usage.rs`
 

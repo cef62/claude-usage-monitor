@@ -17,7 +17,7 @@
 - Windows target: `x86_64-pc-windows-msvc`, NSIS installer only, unsigned.
 - Icon constants (exact): `SIZE = 32`; `OK = [0x34, 0xC7, 0x59, 0xFF]`, `WARN = [0xF5, 0xA6, 0x23, 0xFF]`, `OVER = [0xE5, 0x48, 0x3C, 0xFF]`, `TRACK = [0x80, 0x80, 0x80, 0x90]`, `IDLE = [0xA0, 0xA0, 0xA0, 0xFF]`; bars 26 px wide at x 3..=28, 8 px tall; session y 6..=13, weekly y 18..=25, single bar y 12..=19; 6×6 `OVER` square at x 13..=18, y 13..=18 for `NoToken`/`AuthExpired`; 2 px `OVER` border when `alerts::marker` is true.
 - `bar_color(percent, elapsed)` is the `src/lib/format.ts` `barColor` rule: `OVER` when `percent >= 100 || percent > elapsed`, `WARN` when `percent >= 80`, else `OK`.
-- Blur guard: `BLUR_GUARD = 250 ms`; a show within that window after a blur-hide is ignored.
+- Blur guard: `BLUR_GUARD = 400 ms`; a show within that window after a blur-hide is ignored.
 - `#[tauri::command]` and event code never `unwrap`/`expect`; `Mutex` locks use `unwrap_or_else(|p| p.into_inner())`.
 - `cmd /C claude --version` runs with `CREATE_NO_WINDOW` (`0x0800_0000`) on Windows.
 - Commit messages end with `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>` as a separate trailer (`git commit -m "<subject>" -m "Co-Authored-By: …"`).
