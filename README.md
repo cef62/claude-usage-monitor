@@ -13,11 +13,13 @@ already stored on your machine — nothing else to configure.
 
 Built with Tauri 2, Rust, React and TypeScript. No third-party UI libraries. MIT licensed.
 
-![Menu bar](docs/screenshots/menu-bar-macos.png)
+| macOS menu bar | Windows tray |
+|---|---|
+| ![macOS menu bar](docs/screenshots/mac-tray.png) | ![Windows tray](docs/screenshots/win-tray.png) |
 
-![Popover](docs/screenshots/popover-macos.png)
-
-![Windows tray and popover](docs/screenshots/tray-windows.png)
+| Popover | Right-click menu |
+|---|---|
+| ![Popover](docs/screenshots/mac-popover.png) | ![Menu](docs/screenshots/mac-menu.png) |
 
 ## Install
 
