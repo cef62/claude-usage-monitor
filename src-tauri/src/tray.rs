@@ -1,6 +1,8 @@
 //! Tray icon, its title text, the right-click menu, and popover placement.
 
 use crate::alerts;
+#[cfg(not(target_os = "macos"))]
+use crate::icon;
 use crate::log;
 use crate::poll::{self, Snapshot, Status};
 use crate::settings::{
@@ -9,9 +11,10 @@ use crate::settings::{
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Rect, Wry};
+use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Rect, WebviewWindow, Wry};
 use tauri_plugin_notification::NotificationExt;
 
 pub const POPOVER_WIDTH: f64 = 320.0;
@@ -32,6 +35,13 @@ const DISPLAY_LABELS: [(&str, &str); 5] = [
     ("percent", "Percent"),
     ("remaining", "Remaining time"),
 ];
+
+/// macOS has a menu bar; every other desktop calls it the tray.
+#[cfg(target_os = "macos")]
+const DISPLAY_MENU_LABEL: &str = "Menu bar";
+/// macOS has a menu bar; every other desktop calls it the tray.
+#[cfg(not(target_os = "macos"))]
+const DISPLAY_MENU_LABEL: &str = "Tray";
 
 const ALERT_LABELS: [(&str, &str); 2] = [("alert_session", "Session"), ("alert_weekly", "Weekly")];
 
@@ -222,14 +232,52 @@ pub fn title(s: &Snapshot, now: i64, settings: &Settings) -> String {
     }
 }
 
-/// Top-left corner for a popover of `width` logical pixels centered under the tray icon.
-pub fn popover_origin(rect: &Rect, scale: f64, width: f64) -> LogicalPosition<f64> {
+/// A monitor's area in logical pixels, with its global origin: the tray rect is in global screen
+/// coordinates, so a second display to the right or below has a non-zero origin.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Area {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// Top-left corner for a `width`×`height` logical-pixel popover next to the tray icon: centred
+/// below it when the icon is in the top half of the monitor (menu bar), centred above it
+/// otherwise (bottom taskbar), and never past the monitor's edges.
+pub fn popover_origin(
+    rect: &Rect,
+    scale: f64,
+    width: f64,
+    height: f64,
+    monitor: Area,
+) -> LogicalPosition<f64> {
     let pos = rect.position.to_logical::<f64>(scale);
-    let size = rect.size.to_logical::<f64>(scale);
-    LogicalPosition::new(
-        pos.x + size.width / 2.0 - width / 2.0,
-        pos.y + size.height + POPOVER_GAP,
-    )
+    let icon = rect.size.to_logical::<f64>(scale);
+    let x = (pos.x + icon.width / 2.0 - width / 2.0).clamp(
+        monitor.x,
+        (monitor.x + monitor.width - width).max(monitor.x),
+    );
+    let y = if pos.y + icon.height / 2.0 < monitor.y + monitor.height / 2.0 {
+        pos.y + icon.height + POPOVER_GAP
+    } else {
+        pos.y - POPOVER_GAP - height
+    };
+    LogicalPosition::new(x, y.max(monitor.y))
+}
+
+/// Clicking the tray icon on Windows first steals focus from the popover, which hides it, and
+/// then delivers the click, which would show it again. Ignore shows this soon after a blur-hide.
+pub const BLUR_GUARD: Duration = Duration::from_millis(400);
+
+/// When the popover was last hidden because it lost focus.
+pub struct HiddenAt(pub Mutex<Option<Instant>>);
+
+/// The tray rect of the last click, so a later resize can re-place the popover next to it.
+pub struct LastTrayRect(pub Mutex<Option<Rect>>);
+
+pub fn blur_guard_active(hidden_at: Option<Instant>, now: Instant) -> bool {
+    hidden_at.is_some_and(|t| now.duration_since(t) < BLUR_GUARD)
 }
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
@@ -238,7 +286,13 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
     let mut items = HashMap::new();
-    let display = check_submenu(app, "Menu bar", &DISPLAY_LABELS, &current, &mut items)?;
+    let display = check_submenu(
+        app,
+        DISPLAY_MENU_LABEL,
+        &DISPLAY_LABELS,
+        &current,
+        &mut items,
+    )?;
     let popover = check_submenu(app, "Popover", &POPOVER_LABELS, &current, &mut items)?;
 
     let session_levels = radio_submenu(
@@ -329,6 +383,8 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    #[cfg(not(target_os = "macos"))]
+    refresh(app, &Snapshot::default());
     Ok(())
 }
 
@@ -372,7 +428,7 @@ fn after_settings_change(app: &AppHandle, updated: &Settings, log_text: Option<&
         log::write(app, text);
     }
     let _ = app.emit("settings", PopoverSettings::from(updated));
-    refresh_title(app, &poll::read(&app.state::<poll::Shared>()));
+    refresh(app, &poll::read(&app.state::<poll::Shared>()));
 }
 
 fn on_setting_toggled(app: &AppHandle, key: &str) {
@@ -445,16 +501,89 @@ fn toggle_popover(app: &AppHandle, rect: &Rect) {
         let _ = window.hide();
         return;
     }
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let _ = window.set_position(popover_origin(rect, scale, POPOVER_WIDTH));
+    let hidden_at = app
+        .try_state::<HiddenAt>()
+        .and_then(|h| *h.0.lock().unwrap_or_else(|p| p.into_inner()));
+    if blur_guard_active(hidden_at, Instant::now()) {
+        return;
+    }
+    if let Some(last) = app.try_state::<LastTrayRect>() {
+        *last.0.lock().unwrap_or_else(|p| p.into_inner()) = Some(*rect);
+    }
+    place(app, &window, rect);
     let _ = window.show();
     let _ = window.set_focus();
 }
 
-pub fn refresh_title(app: &AppHandle, s: &Snapshot) {
+/// The monitor whose physical rectangle contains the icon's centre. The hidden popover's own
+/// monitor is not it on a multi-display Mac, and `monitor_from_point` takes logical points on
+/// macOS but physical pixels on Windows, so containment is checked by hand.
+fn monitor_under(app: &AppHandle, rect: &Rect) -> Option<tauri::Monitor> {
+    app.available_monitors().ok()?.into_iter().find(|m| {
+        let pos = rect.position.to_physical::<f64>(m.scale_factor());
+        let size = rect.size.to_physical::<f64>(m.scale_factor());
+        let (cx, cy) = (pos.x + size.width / 2.0, pos.y + size.height / 2.0);
+        let (mx, my) = (f64::from(m.position().x), f64::from(m.position().y));
+        cx >= mx
+            && cy >= my
+            && cx < mx + f64::from(m.size().width)
+            && cy < my + f64::from(m.size().height)
+    })
+}
+
+/// Moves the popover next to the tray icon at `rect`; the window keeps its current size.
+pub fn place(app: &AppHandle, window: &WebviewWindow, rect: &Rect) {
+    let monitor = monitor_under(app, rect)
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let (scale, area) = match monitor {
+        Some(m) => {
+            let scale = m.scale_factor();
+            let origin = m.position().to_logical::<f64>(scale);
+            let size = m.size().to_logical::<f64>(scale);
+            (
+                scale,
+                Area {
+                    x: origin.x,
+                    y: origin.y,
+                    width: size.width,
+                    height: size.height,
+                },
+            )
+        }
+        None => (
+            window.scale_factor().unwrap_or(1.0),
+            Area {
+                x: 0.0,
+                y: 0.0,
+                width: 1920.0,
+                height: 1080.0,
+            },
+        ),
+    };
+    let height = window
+        .outer_size()
+        .map(|s| s.to_logical::<f64>(scale).height)
+        .unwrap_or(240.0);
+    let _ = window.set_position(popover_origin(rect, scale, POPOVER_WIDTH, height, area));
+}
+
+/// Pushes the snapshot to the tray. macOS shows the text as the status-item title; Windows has
+/// no title, so the same text becomes the tooltip and the numbers are drawn into the icon.
+pub fn refresh(app: &AppHandle, s: &Snapshot) {
     let settings = lock_settings(app).clone();
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(Some(title(s, poll::now(), &settings)));
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let text = title(s, poll::now(), &settings);
+    #[cfg(target_os = "macos")]
+    let _ = tray.set_title(Some(text));
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = tray.set_tooltip(Some(text.trim()));
+        let rgba = icon::render(s, &settings, poll::now());
+        let image = tauri::image::Image::new_owned(rgba, icon::SIZE, icon::SIZE);
+        let _ = tray.set_icon(Some(image));
     }
 }
 
@@ -463,6 +592,7 @@ mod tests {
     use super::*;
     use crate::settings::Settings;
     use crate::usage::{Quota, SESSION_SECS, WEEKLY_SECS};
+    use std::time::{Duration, Instant};
     use tauri::{LogicalSize, Position, Rect, Size};
 
     const NOW: i64 = 1_789_588_800;
@@ -662,14 +792,123 @@ mod tests {
         assert!(parse_menu_id("bogus").is_none());
     }
 
+    const MONITOR: Area = Area {
+        x: 0.0,
+        y: 0.0,
+        width: 1440.0,
+        height: 900.0,
+    };
+
+    fn icon_rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
+        Rect {
+            position: Position::Logical(LogicalPosition::new(x, y)),
+            size: Size::Logical(LogicalSize::new(w, h)),
+        }
+    }
+
     #[test]
-    fn popover_is_centered_under_the_icon() {
-        let rect = Rect {
-            position: Position::Logical(LogicalPosition::new(1000.0, 0.0)),
-            size: Size::Logical(LogicalSize::new(120.0, 22.0)),
-        };
-        let origin = popover_origin(&rect, 2.0, 320.0);
+    fn popover_is_centered_under_a_menu_bar_icon() {
+        let origin = popover_origin(
+            &icon_rect(1000.0, 0.0, 120.0, 22.0),
+            2.0,
+            320.0,
+            240.0,
+            MONITOR,
+        );
         assert_eq!(origin.x, 900.0);
         assert_eq!(origin.y, 28.0);
+    }
+
+    #[test]
+    fn popover_sits_above_a_bottom_taskbar_icon() {
+        let origin = popover_origin(
+            &icon_rect(1200.0, 860.0, 24.0, 40.0),
+            1.0,
+            320.0,
+            240.0,
+            MONITOR,
+        );
+        assert_eq!(origin.x, 1052.0);
+        assert_eq!(origin.y, 860.0 - 6.0 - 240.0);
+    }
+
+    #[test]
+    fn popover_is_clamped_to_the_monitor_edges() {
+        let right = popover_origin(
+            &icon_rect(1406.0, 860.0, 24.0, 40.0),
+            1.0,
+            320.0,
+            240.0,
+            MONITOR,
+        );
+        assert_eq!(right.x, 1440.0 - 320.0);
+        let left = popover_origin(
+            &icon_rect(10.0, 0.0, 24.0, 22.0),
+            1.0,
+            320.0,
+            240.0,
+            MONITOR,
+        );
+        assert_eq!(left.x, 0.0);
+    }
+
+    #[test]
+    fn popover_stays_on_a_monitor_to_the_right() {
+        let monitor = Area {
+            x: 1440.0,
+            y: 0.0,
+            width: 2560.0,
+            height: 1440.0,
+        };
+        let origin = popover_origin(
+            &icon_rect(3500.0, 0.0, 120.0, 22.0),
+            1.0,
+            320.0,
+            240.0,
+            monitor,
+        );
+        assert_eq!(origin.x, 3400.0);
+        assert_eq!(origin.y, 28.0);
+        let edge = popover_origin(
+            &icon_rect(3990.0, 0.0, 120.0, 22.0),
+            1.0,
+            320.0,
+            240.0,
+            monitor,
+        );
+        assert_eq!(edge.x, 1440.0 + 2560.0 - 320.0);
+    }
+
+    #[test]
+    fn popover_opens_below_a_menu_bar_on_a_monitor_underneath() {
+        let monitor = Area {
+            x: 0.0,
+            y: 900.0,
+            width: 1440.0,
+            height: 900.0,
+        };
+        let origin = popover_origin(
+            &icon_rect(700.0, 900.0, 120.0, 22.0),
+            1.0,
+            320.0,
+            240.0,
+            monitor,
+        );
+        assert_eq!(origin.x, 600.0);
+        assert_eq!(origin.y, 928.0);
+    }
+
+    #[test]
+    fn blur_guard_only_covers_the_first_400ms() {
+        let now = Instant::now();
+        assert!(!blur_guard_active(None, now));
+        assert!(blur_guard_active(
+            Some(now - Duration::from_millis(100)),
+            now
+        ));
+        assert!(!blur_guard_active(
+            Some(now - Duration::from_millis(600)),
+            now
+        ));
     }
 }

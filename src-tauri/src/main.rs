@@ -4,6 +4,7 @@ use claude_usage_monitor::poll::{self, Shared, Snapshot};
 use claude_usage_monitor::tray;
 use claude_usage_monitor::{alerts, log, settings};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_notification::NotificationExt;
 
@@ -22,13 +23,24 @@ fn hide_popover(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn resize_popover(app: AppHandle, height: u32) -> Result<(), String> {
-    app.get_webview_window("popover")
-        .ok_or("no popover window")?
+    let window = app
+        .get_webview_window("popover")
+        .ok_or("no popover window")?;
+    window
         .set_size(tauri::LogicalSize::new(
             tray::POPOVER_WIDTH,
             f64::from(height),
         ))
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // set_size keeps the top-left corner, so a taller popover above a Windows taskbar would grow
+    // down over it; re-place it against the icon it was opened from.
+    let last = app
+        .try_state::<tray::LastTrayRect>()
+        .and_then(|l| *l.0.lock().unwrap_or_else(|p| p.into_inner()));
+    if let Some(rect) = last {
+        tray::place(&app, &window, &rect);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -106,6 +118,9 @@ fn main() {
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
                 let _ = window.hide();
+                if let Some(hidden) = window.app_handle().try_state::<tray::HiddenAt>() {
+                    *hidden.0.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
+                }
             }
         })
         .setup(move |app| {
@@ -117,6 +132,8 @@ fn main() {
             let settings = Arc::new(Mutex::new(initial));
             app.manage(settings.clone());
             app.manage(Mutex::new(alerts::AlertState::default()));
+            app.manage(tray::HiddenAt(Mutex::new(None)));
+            app.manage(tray::LastTrayRect(Mutex::new(None)));
             tray::setup(app.handle())?;
             log::write(
                 app.handle(),
@@ -124,7 +141,7 @@ fn main() {
             );
             let handle = app.handle().clone();
             poll::run(shared, settings, log::path(app.handle()), move |snapshot| {
-                tray::refresh_title(&handle, snapshot);
+                tray::refresh(&handle, snapshot);
                 notify_thresholds(&handle, snapshot);
                 let _ = handle.emit("usage", snapshot);
             });

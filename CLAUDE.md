@@ -4,18 +4,18 @@
 
 A small, minimal desktop app that shows the current Claude plan usage: percentage consumed in
 the 5-hour session window and the weekly window, plus when each resets. It lives in the macOS
-menu bar (Windows system tray later) and opens a small floating window with the same numbers,
+menu bar or the Windows system tray and opens a small floating window with the same numbers,
 better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1.3 (configuration, bar overlays, log) implemented; released via the Changesets
-pipeline.
+**Status:** v1.4 (Windows system tray) implemented; released via the Changesets pipeline.
 Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 `docs/superpowers/specs/2026-09-17-ci-release-design.md`,
 `docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`,
 `docs/superpowers/specs/2026-09-17-threshold-alerts-design.md`,
-`docs/superpowers/specs/2026-09-17-config-and-log-design.md`.
+`docs/superpowers/specs/2026-09-17-config-and-log-design.md`,
+`docs/superpowers/specs/2026-09-18-windows-tray-design.md`.
 
 ## Reference Material (read before writing code)
 
@@ -65,6 +65,7 @@ src-tauri/
   src/tray.rs              tray icon, menu, title text, popover positioning
   src/settings.rs          menu bar display settings, JSON in app_data_dir
   src/alerts.rs            threshold alert state machine (pure)
+  src/icon.rs              Windows tray icon renderer (pure RGBA)
   src/log.rs               capped local log (never the token)
   icons/
 test/                      Vitest specs for src/lib
@@ -114,7 +115,10 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
   the frontend needs camelCase, and then everywhere).
 - Push state to the frontend with events (`app.emit`) from the poll loop; the frontend does not
   poll the backend on a timer.
-- OS-specific code behind `#[cfg(target_os = "...")]`. macOS first; keep Windows compiling.
+- OS-specific code behind `#[cfg(target_os = "...")]`. The platform forks in the tray are
+  `tray::refresh` (macOS: title; elsewhere: tooltip + `icon::render`), `DISPLAY_MENU_LABEL`, and
+  the startup icon seed in `tray::setup`. Spawn `claude` through
+  `cmd /C` on Windows (it is a `.cmd` shim) with `CREATE_NO_WINDOW`.
 - Release profile: `opt-level = "s"`, `lto = true`, `codegen-units = 1`, `strip = true`,
   `panic = "abort"`. `main.rs` starts with
   `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`.
@@ -147,7 +151,7 @@ pnpm changeset          # add a changeset for a user-visible change (required in
   opens the Version Packages PR; on its merge runs `changeset git-tag`, pushes the tag and
   dispatches `build-release.yml`), `build-release.yml` (dispatched by `release.yml`, or any
   manual `v*` tag push: `tauri-action` builds `aarch64-apple-darwin` and publishes the GitHub
-  Release).
+  Release, then a second job adds the Windows x64 NSIS installer).
 - Never edit versions by hand; never create tags by hand.
 
 ## Code Conventions
@@ -168,7 +172,6 @@ pnpm changeset          # add a changeset for a user-visible change (required in
 - Don't add a "refresh now" that ignores the cooldown.
 - Don't use `localStorage` for anything that must survive; settings live in the Rust side
   (`app_data_dir`).
-- Don't scaffold for Windows features before macOS works; keep it compiling, nothing more.
 
 ## Workflow Standards
 
