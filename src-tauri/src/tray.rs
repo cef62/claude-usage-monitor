@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Rect, WebviewWindow, Wry};
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_notification::NotificationExt;
 
 pub const POPOVER_WIDTH: f64 = 320.0;
@@ -60,6 +61,7 @@ pub enum MenuAction {
     Interval(u64),
     TestNotification,
     OpenLog,
+    Autostart,
 }
 
 pub fn radio_id_levels(key: &str, levels: &[u8]) -> String {
@@ -81,6 +83,7 @@ pub fn parse_menu_id(id: &str) -> Option<MenuAction> {
         "quit" => return Some(MenuAction::Quit),
         "test-notification" => return Some(MenuAction::TestNotification),
         "open-log" => return Some(MenuAction::OpenLog),
+        "autostart" => return Some(MenuAction::Autostart),
         _ => {}
     }
     if let Some(key) = id.strip_prefix("set:") {
@@ -336,6 +339,16 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         &interval_entries(current.poll_interval_secs),
         &mut items,
     )?;
+    // The OS login-item registry is the only source of truth: nothing is persisted in settings.
+    let autostart = CheckMenuItem::with_id(
+        app,
+        "autostart",
+        "Start at login",
+        true,
+        app.autolaunch().is_enabled().unwrap_or(false),
+        None::<&str>,
+    )?;
+    items.insert("autostart".to_string(), autostart.clone());
     let open_log_item = MenuItemBuilder::with_id("open-log", "Open log").build(app)?;
     let help = SubmenuBuilder::new(app, "Help")
         .item(&open_log_item)
@@ -348,6 +361,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .item(&popover)
         .item(&alerts_menu)
         .item(&interval)
+        .item(&autostart)
         .item(&help)
         .separator()
         .item(&quit)
@@ -369,6 +383,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
             Some(MenuAction::Interval(secs)) => on_interval_chosen(app, secs),
             Some(MenuAction::TestNotification) => send_test_notification(app),
             Some(MenuAction::OpenLog) => open_log(app),
+            Some(MenuAction::Autostart) => on_autostart_toggled(app),
             None => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -481,6 +496,26 @@ fn send_test_notification(app: &AppHandle) {
         .body("Notifications are working")
         .show();
     log::write(app, "test notification");
+}
+
+/// Flips the OS login item, then shows whatever the OS reports so a failed call never lies.
+fn on_autostart_toggled(app: &AppHandle) {
+    let launcher = app.autolaunch();
+    let result = if launcher.is_enabled().unwrap_or(false) {
+        launcher.disable()
+    } else {
+        launcher.enable()
+    };
+    if let Err(e) = result {
+        log::write(app, &format!("autostart error {e}"));
+    }
+    let enabled = launcher.is_enabled().unwrap_or(false);
+    if let Some(items) = app.try_state::<MenuItems>() {
+        if let Some(item) = items.0.get("autostart") {
+            let _ = item.set_checked(enabled);
+        }
+    }
+    log::write(app, &format!("settings autostart={enabled}"));
 }
 
 fn open_log(app: &AppHandle) {
@@ -770,6 +805,10 @@ mod tests {
         assert_eq!(radio_id_interval(300), "interval:300");
         assert!(matches!(parse_menu_id("open"), Some(MenuAction::Open)));
         assert!(matches!(parse_menu_id("quit"), Some(MenuAction::Quit)));
+        assert!(matches!(
+            parse_menu_id("autostart"),
+            Some(MenuAction::Autostart)
+        ));
         assert!(matches!(parse_menu_id("set:glyph"), Some(MenuAction::Toggle(k)) if k == "glyph"));
         assert!(matches!(
             parse_menu_id("levels:weekly:80,95"),
