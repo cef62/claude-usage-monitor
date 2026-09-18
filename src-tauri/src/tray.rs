@@ -44,7 +44,11 @@ const DISPLAY_MENU_LABEL: &str = "Menu bar";
 #[cfg(not(target_os = "macos"))]
 const DISPLAY_MENU_LABEL: &str = "Tray";
 
-const ALERT_LABELS: [(&str, &str); 2] = [("alert_session", "Session"), ("alert_weekly", "Weekly")];
+const ALERT_LABELS: [(&str, &str); 3] = [
+    ("alert_session", "Session"),
+    ("alert_weekly", "Weekly"),
+    ("alert_reset", "Notify on reset"),
+];
 
 const POPOVER_LABELS: [(&str, &str); 3] = [
     ("show_time_ticks", "Time ticks"),

@@ -89,7 +89,9 @@ the claude.ai usage and billing pages.
 A system notification fires when a quota crosses an alert level, once per level per reset
 window. The highest level of each preset always fires and shows `⚠` in the menu bar; the lower
 levels fire only while usage is ahead of the elapsed time, so a normal, steady pace does not
-nag you. The first notification triggers the OS permission prompt — allow it.
+nag you. When a quota that reached its top level rolls into a new window, a "reset"
+notification tells you it is back to 0 % (**Notify on reset**, on by default). The first
+notification triggers the OS permission prompt — allow it.
 
 ## Configure
 
@@ -99,7 +101,7 @@ Everything is in the right-click menu and persists across restarts:
 |---|---|
 | **Menu bar** (macOS) / **Tray** (Windows) | Session · Weekly · Glyphs (`◷` / `▦`) · Percent · Remaining time. At least one quota and one of Percent/Remaining stay on. On Windows, Session/Weekly also hide the matching bar in the icon; the other three shape the tooltip. |
 | **Popover** | Time ticks · Elapsed marker · Threshold marks |
-| **Alerts** | Session · Weekly (on/off) · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
+| **Alerts** | Session · Weekly (on/off) · Notify on reset · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
 | **Check every** | 3 · 5 · 10 · 15 minutes (the API rate-limits below 2 minutes, so that is the floor) |
 | **Start at login** | registers the app as a login item (macOS: System Settings → General → Login Items, "Allow in the Background"; Windows: `HKCU\…\Run`). Off by default; the check mark always shows what the OS reports. Toggle it from the installed app, not from `pnpm tauri dev`. |
 | **Help → Open log** | reveals `claude-usage-monitor.log`: poll results, alerts, settings changes — never your token. Rotates at 1 MB. Attach it when reporting a problem. |

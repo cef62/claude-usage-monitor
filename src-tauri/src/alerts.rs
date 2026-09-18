@@ -2,7 +2,7 @@
 
 use crate::settings::Settings;
 use crate::usage::Quota;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const PRUNE_AFTER_SECS: i64 = 86_400;
 /// `resets_at` jitters sub-second between polls (docs/research-usage-monitors.md); anything
@@ -16,10 +16,20 @@ fn already_fired(state: &AlertState, key: &str, resets_at: i64, level: u8) -> bo
         .any(|(k, r, l)| k == key && *l == level && (r - resets_at).abs() <= SAME_WINDOW_SECS)
 }
 
-/// Levels already announced, keyed by (quota key, reset window, level). In-memory only.
+/// Levels already announced, keyed by (quota key, reset window, level), plus the window in
+/// which each quota last hit its top level — that arms the reset notification. In-memory only.
 #[derive(Default)]
 pub struct AlertState {
     fired: HashSet<(String, i64, u8)>,
+    armed: HashMap<String, i64>,
+}
+
+/// A quota whose window rolled over after the top level had fired in the previous one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reset {
+    pub key: String,
+    pub label: String,
+    pub resets_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,6 +39,30 @@ pub struct Alert {
     pub level: u8,
     pub percent: f64,
     pub resets_at: i64,
+}
+
+/// Quotas that reached their top level and have since rolled into a new window. Each fires once;
+/// the arming survives toggles being off so it is delivered when they come back on.
+pub fn resets(state: &mut AlertState, quotas: &[Quota], settings: &Settings) -> Vec<Reset> {
+    if !settings.alert_reset {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for q in quotas.iter().filter(|q| enabled(settings, &q.key)) {
+        let rolled = state
+            .armed
+            .get(&q.key)
+            .is_some_and(|armed_at| q.resets_at - armed_at > SAME_WINDOW_SECS);
+        if rolled {
+            state.armed.remove(&q.key);
+            out.push(Reset {
+                key: q.key.clone(),
+                label: label(&q.key).to_string(),
+                resets_at: q.resets_at,
+            });
+        }
+    }
+    out
 }
 
 /// Fraction of the reset window already elapsed, 0..=100.
@@ -93,6 +127,9 @@ pub fn evaluate(
         };
         for &level in levels.iter().filter(|&&l| l <= highest) {
             state.fired.insert((q.key.clone(), q.resets_at, level));
+        }
+        if highest == top_level {
+            state.armed.insert(q.key.clone(), q.resets_at);
         }
         alerts.push(Alert {
             key: q.key.clone(),
@@ -316,5 +353,57 @@ mod tests {
         assert!(marker(&[session(96.0, 7200)], &s));
         assert_eq!(top(&[90, 95]), Some(95));
         assert_eq!(top(&[]), None);
+    }
+
+    fn next_window(q: &Quota) -> Quota {
+        Quota {
+            resets_at: q.resets_at + q.period_secs as i64,
+            ..q.clone()
+        }
+    }
+
+    #[test]
+    fn reset_fires_once_after_the_top_level_was_reached() {
+        let mut st = AlertState::default();
+        let blocked = session(96.0, 3600);
+        assert_eq!(evaluate(&mut st, &[blocked.clone()], &on(), NOW).len(), 1);
+        assert!(resets(&mut st, &[blocked.clone()], &on()).is_empty());
+        let fresh = next_window(&blocked);
+        let out = resets(&mut st, &[fresh.clone()], &on());
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].key, "session");
+        assert_eq!(out[0].label, "Session");
+        assert_eq!(out[0].resets_at, fresh.resets_at);
+        assert!(resets(&mut st, &[fresh], &on()).is_empty());
+    }
+
+    #[test]
+    fn reset_needs_the_top_level_not_just_any_alert() {
+        let mut st = AlertState::default();
+        let warm = session(85.0, 7200); // fires 80, not 95
+        assert_eq!(evaluate(&mut st, &[warm.clone()], &on(), NOW).len(), 1);
+        assert!(resets(&mut st, &[next_window(&warm)], &on()).is_empty());
+    }
+
+    #[test]
+    fn reset_ignores_jitter_and_respects_toggles() {
+        let mut st = AlertState::default();
+        let blocked = session(96.0, 3600);
+        evaluate(&mut st, &[blocked.clone()], &on(), NOW);
+        let jittered = Quota {
+            resets_at: blocked.resets_at + 1,
+            ..blocked.clone()
+        };
+        assert!(resets(&mut st, &[jittered], &on()).is_empty());
+
+        let mut off = on();
+        assert!(off.toggle("alert_reset"));
+        assert!(resets(&mut st, &[next_window(&blocked)], &off).is_empty());
+
+        let mut no_session = on();
+        assert!(no_session.toggle("alert_session"));
+        assert!(resets(&mut st, &[next_window(&blocked)], &no_session).is_empty());
+        // still armed: turning the toggles back on delivers it
+        assert_eq!(resets(&mut st, &[next_window(&blocked)], &on()).len(), 1);
     }
 }
