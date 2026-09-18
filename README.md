@@ -101,6 +101,7 @@ Everything is in the right-click menu and persists across restarts:
 | **Popover** | Time ticks · Elapsed marker · Threshold marks |
 | **Alerts** | Session · Weekly (on/off) · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
 | **Check every** | 3 · 5 · 10 · 15 minutes (the API rate-limits below 2 minutes, so that is the floor) |
+| **Start at login** | registers the app as a login item (macOS: System Settings → General → Login Items, "Allow in the Background"; Windows: `HKCU\…\Run`). Off by default; the check mark always shows what the OS reports. Toggle it from the installed app, not from `pnpm tauri dev`. |
 | **Help → Open log** | reveals `claude-usage-monitor.log`: poll results, alerts, settings changes — never your token. Rotates at 1 MB. Attach it when reporting a problem. |
 
 Settings file (hand-editing is fine; `session_levels` / `weekly_levels` accept any 1–100 values,
@@ -121,7 +122,7 @@ full stop on `401` until you log in again.
 
 ## Not yet
 
-Launch at login, code signing / notarization, auto-update, Windows ARM64, Linux.
+Code signing / notarization, auto-update, Windows ARM64, Linux.
 
 ## Contributing
 
