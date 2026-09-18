@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.7.0
+
+### Minor Changes
+
+- 1c536f3: "Notify on reset": a notification when a quota that had reached its top alert level rolls into a new window, once per reset; toggle under Alerts, on by default.
+
 ## 0.6.1
 
 ### Patch Changes
