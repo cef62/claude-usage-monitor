@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.5.0
+
+### Minor Changes
+
+- f678f61: Windows support: system tray icon with session/weekly bars and a tooltip, popover above the taskbar, and an unsigned x64 installer attached to every release.
+
 ## 0.4.0
 
 ### Minor Changes
