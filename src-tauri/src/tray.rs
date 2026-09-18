@@ -1,6 +1,8 @@
 //! Tray icon, its title text, the right-click menu, and popover placement.
 
 use crate::alerts;
+#[cfg(not(target_os = "macos"))]
+use crate::icon;
 use crate::log;
 use crate::poll::{self, Snapshot, Status};
 use crate::settings::{
@@ -32,6 +34,12 @@ const DISPLAY_LABELS: [(&str, &str); 5] = [
     ("percent", "Percent"),
     ("remaining", "Remaining time"),
 ];
+
+/// macOS has a menu bar; every other desktop calls it the tray.
+#[cfg(target_os = "macos")]
+const DISPLAY_MENU_LABEL: &str = "Menu bar";
+#[cfg(not(target_os = "macos"))]
+const DISPLAY_MENU_LABEL: &str = "Tray";
 
 const ALERT_LABELS: [(&str, &str); 2] = [("alert_session", "Session"), ("alert_weekly", "Weekly")];
 
@@ -238,7 +246,13 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
     let mut items = HashMap::new();
-    let display = check_submenu(app, "Menu bar", &DISPLAY_LABELS, &current, &mut items)?;
+    let display = check_submenu(
+        app,
+        DISPLAY_MENU_LABEL,
+        &DISPLAY_LABELS,
+        &current,
+        &mut items,
+    )?;
     let popover = check_submenu(app, "Popover", &POPOVER_LABELS, &current, &mut items)?;
 
     let session_levels = radio_submenu(
@@ -329,6 +343,8 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    #[cfg(not(target_os = "macos"))]
+    refresh(app, &Snapshot::default());
     Ok(())
 }
 
@@ -372,7 +388,7 @@ fn after_settings_change(app: &AppHandle, updated: &Settings, log_text: Option<&
         log::write(app, text);
     }
     let _ = app.emit("settings", PopoverSettings::from(updated));
-    refresh_title(app, &poll::read(&app.state::<poll::Shared>()));
+    refresh(app, &poll::read(&app.state::<poll::Shared>()));
 }
 
 fn on_setting_toggled(app: &AppHandle, key: &str) {
@@ -451,10 +467,22 @@ fn toggle_popover(app: &AppHandle, rect: &Rect) {
     let _ = window.set_focus();
 }
 
-pub fn refresh_title(app: &AppHandle, s: &Snapshot) {
+/// Pushes the snapshot to the tray. macOS shows the text as the status-item title; Windows has
+/// no title, so the same text becomes the tooltip and the numbers are drawn into the icon.
+pub fn refresh(app: &AppHandle, s: &Snapshot) {
     let settings = lock_settings(app).clone();
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(Some(title(s, poll::now(), &settings)));
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let text = title(s, poll::now(), &settings);
+    #[cfg(target_os = "macos")]
+    let _ = tray.set_title(Some(text));
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = tray.set_tooltip(Some(text.trim()));
+        let rgba = icon::render(s, &settings, poll::now());
+        let image = tauri::image::Image::new_owned(rgba, icon::SIZE, icon::SIZE);
+        let _ = tray.set_icon(Some(image));
     }
 }
 
@@ -660,6 +688,15 @@ mod tests {
         assert!(parse_menu_id("levels:weekly:x").is_none());
         assert!(parse_menu_id("interval:abc").is_none());
         assert!(parse_menu_id("bogus").is_none());
+    }
+
+    #[test]
+    fn display_menu_label_matches_the_platform() {
+        if cfg!(target_os = "macos") {
+            assert_eq!(DISPLAY_MENU_LABEL, "Menu bar");
+        } else {
+            assert_eq!(DISPLAY_MENU_LABEL, "Tray");
+        }
     }
 
     #[test]

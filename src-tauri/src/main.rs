@@ -124,7 +124,7 @@ fn main() {
             );
             let handle = app.handle().clone();
             poll::run(shared, settings, log::path(app.handle()), move |snapshot| {
-                tray::refresh_title(&handle, snapshot);
+                tray::refresh(&handle, snapshot);
                 notify_thresholds(&handle, snapshot);
                 let _ = handle.emit("usage", snapshot);
             });
