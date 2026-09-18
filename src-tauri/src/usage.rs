@@ -78,9 +78,27 @@ pub enum FetchError {
     Network(String),
 }
 
+/// `claude` is a `.cmd` shim on Windows, which `CreateProcess` will not resolve, so go through
+/// `cmd /C`. `CREATE_NO_WINDOW` keeps the console from flashing in front of the tray app.
+#[cfg(target_os = "windows")]
+fn claude_version_command() -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut c = std::process::Command::new("cmd");
+    c.args(["/C", "claude", "--version"])
+        .creation_flags(CREATE_NO_WINDOW);
+    c
+}
+
+#[cfg(not(target_os = "windows"))]
+fn claude_version_command() -> std::process::Command {
+    let mut c = std::process::Command::new("claude");
+    c.arg("--version");
+    c
+}
+
 pub fn user_agent() -> String {
-    let version = std::process::Command::new("claude")
-        .arg("--version")
+    let version = claude_version_command()
         .output()
         .ok()
         .filter(|o| o.status.success())
