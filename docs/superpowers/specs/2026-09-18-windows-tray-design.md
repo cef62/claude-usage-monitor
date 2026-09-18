@@ -190,7 +190,7 @@ Rust, inline `#[cfg(test)]`:
 - `tray::popover_origin`: menu-bar rect at y 0 on a 1440×900 monitor → below (existing test
   updated with the new arguments); taskbar rect at y 860, height 40, popover height 240 →
   `y = 860 − 6 − 240`; icon 10 px from the right edge → `x = monitor.width − width`.
-- `tray::blur_guard_active`: `None → false`, 100 ms ago → `true`, 400 ms ago → `false`.
+- `tray::blur_guard_active`: `None → false`, 100 ms ago → `true`, 600 ms ago → `false`.
 - `usage::user_agent` test unchanged (runs the platform command).
 
 CI: both jobs green; the Windows job produces the `windows-installer` artifact.
