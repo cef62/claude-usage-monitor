@@ -68,13 +68,28 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone();
     let now = poll::now();
-    let due = {
+    let (resets, due) = {
         let state = app.state::<Mutex<alerts::AlertState>>();
         let mut state = state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        alerts::evaluate(&mut state, &snapshot.quotas, &settings, now)
+        // Resets first: they belong to the window that just ended, thresholds to the new one.
+        let resets = alerts::resets(&mut state, &snapshot.quotas, &settings);
+        let due = alerts::evaluate(&mut state, &snapshot.quotas, &settings, now);
+        (resets, due)
     };
+    for reset in resets {
+        let _ = app
+            .notification()
+            .builder()
+            .title(format!("Claude usage: {} reset", reset.label))
+            .body(format!(
+                "Back to 0% · next reset in {}",
+                tray::countdown(reset.resets_at - now)
+            ))
+            .show();
+        log::write(app, &format!("reset {}", reset.key));
+    }
     for alert in due {
         let _ = app
             .notification()

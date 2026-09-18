@@ -16,6 +16,7 @@ pub struct Settings {
     pub remaining: bool,
     pub alert_session: bool,
     pub alert_weekly: bool,
+    pub alert_reset: bool,
     pub show_time_ticks: bool,
     pub show_elapsed_marker: bool,
     pub show_threshold_marks: bool,
@@ -34,6 +35,7 @@ impl Default for Settings {
             remaining: true,
             alert_session: true,
             alert_weekly: true,
+            alert_reset: true,
             show_time_ticks: true,
             show_elapsed_marker: true,
             show_threshold_marks: true,
@@ -44,7 +46,7 @@ impl Default for Settings {
     }
 }
 
-pub const KEYS: [&str; 10] = [
+pub const KEYS: [&str; 11] = [
     "session",
     "weekly",
     "glyph",
@@ -52,6 +54,7 @@ pub const KEYS: [&str; 10] = [
     "remaining",
     "alert_session",
     "alert_weekly",
+    "alert_reset",
     "show_time_ticks",
     "show_elapsed_marker",
     "show_threshold_marks",
@@ -72,6 +75,7 @@ impl Settings {
             "remaining" => self.remaining,
             "alert_session" => self.alert_session,
             "alert_weekly" => self.alert_weekly,
+            "alert_reset" => self.alert_reset,
             "show_time_ticks" => self.show_time_ticks,
             "show_elapsed_marker" => self.show_elapsed_marker,
             "show_threshold_marks" => self.show_threshold_marks,
@@ -81,7 +85,7 @@ impl Settings {
 
     /// Flips `key`. Returns false and changes nothing when the flip would disable the last
     /// enabled member of a pair (session/weekly, percent/remaining) or the key is unknown.
-    /// `glyph`, `alert_session`, and `alert_weekly` have no partner and can be freely toggled.
+    /// `glyph`, `alert_session`, `alert_weekly`, and `alert_reset` have no partner and can be freely toggled.
     pub fn toggle(&mut self, key: &str) -> bool {
         let partner_on = match key {
             "session" => self.weekly,
@@ -89,7 +93,7 @@ impl Settings {
             "percent" => self.remaining,
             "remaining" => self.percent,
             "glyph" => true,
-            "alert_session" | "alert_weekly" => true,
+            "alert_session" | "alert_weekly" | "alert_reset" => true,
             "show_time_ticks" | "show_elapsed_marker" | "show_threshold_marks" => true,
             _ => return false,
         };
@@ -104,6 +108,7 @@ impl Settings {
             "remaining" => self.remaining = !self.remaining,
             "alert_session" => self.alert_session = !self.alert_session,
             "alert_weekly" => self.alert_weekly = !self.alert_weekly,
+            "alert_reset" => self.alert_reset = !self.alert_reset,
             "show_time_ticks" => self.show_time_ticks = !self.show_time_ticks,
             "show_elapsed_marker" => self.show_elapsed_marker = !self.show_elapsed_marker,
             "show_threshold_marks" => self.show_threshold_marks = !self.show_threshold_marks,
@@ -335,9 +340,12 @@ mod tests {
 
     #[test]
     fn alert_keys_toggle_freely() {
-        assert_eq!(KEYS.len(), 10);
+        assert_eq!(KEYS.len(), 11);
         let mut s = Settings::default();
-        assert!(s.alert_session && s.alert_weekly);
+        assert!(s.alert_session && s.alert_weekly && s.alert_reset);
+        assert!(s.toggle("alert_reset"));
+        assert!(!s.get("alert_reset"));
+        assert!(s.toggle("alert_reset"));
         assert!(s.toggle("alert_session"));
         assert!(s.toggle("alert_weekly"));
         assert!(!s.get("alert_session") && !s.get("alert_weekly"));
@@ -359,7 +367,7 @@ mod tests {
     #[test]
     fn new_fields_default() {
         let s = Settings::default();
-        assert_eq!(KEYS.len(), 10);
+        assert_eq!(KEYS.len(), 11);
         assert!(s.show_time_ticks && s.show_elapsed_marker && s.show_threshold_marks);
         assert_eq!(s.session_levels, vec![80, 95]);
         assert_eq!(s.weekly_levels, vec![95]);
