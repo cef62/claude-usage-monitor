@@ -23,13 +23,24 @@ fn hide_popover(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn resize_popover(app: AppHandle, height: u32) -> Result<(), String> {
-    app.get_webview_window("popover")
-        .ok_or("no popover window")?
+    let window = app
+        .get_webview_window("popover")
+        .ok_or("no popover window")?;
+    window
         .set_size(tauri::LogicalSize::new(
             tray::POPOVER_WIDTH,
             f64::from(height),
         ))
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // set_size keeps the top-left corner, so a taller popover above a Windows taskbar would grow
+    // down over it; re-place it against the icon it was opened from.
+    let last = app
+        .try_state::<tray::LastTrayRect>()
+        .and_then(|l| *l.0.lock().unwrap_or_else(|p| p.into_inner()));
+    if let Some(rect) = last {
+        tray::place(&app, &window, &rect);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -122,6 +133,7 @@ fn main() {
             app.manage(settings.clone());
             app.manage(Mutex::new(alerts::AlertState::default()));
             app.manage(tray::HiddenAt(Mutex::new(None)));
+            app.manage(tray::LastTrayRect(Mutex::new(None)));
             tray::setup(app.handle())?;
             log::write(
                 app.handle(),
