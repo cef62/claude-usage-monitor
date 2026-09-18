@@ -11,9 +11,10 @@ use crate::settings::{
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Rect, Wry};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, Wry};
 use tauri_plugin_notification::NotificationExt;
 
 pub const POPOVER_WIDTH: f64 = 320.0;
@@ -230,14 +231,36 @@ pub fn title(s: &Snapshot, now: i64, settings: &Settings) -> String {
     }
 }
 
-/// Top-left corner for a popover of `width` logical pixels centered under the tray icon.
-pub fn popover_origin(rect: &Rect, scale: f64, width: f64) -> LogicalPosition<f64> {
+/// Top-left corner for a `width`×`height` logical-pixel popover next to the tray icon: centred
+/// below it when the icon is in the top half of the monitor (menu bar), centred above it
+/// otherwise (bottom taskbar), and never past the monitor's left/right edge.
+pub fn popover_origin(
+    rect: &Rect,
+    scale: f64,
+    width: f64,
+    height: f64,
+    monitor: LogicalSize<f64>,
+) -> LogicalPosition<f64> {
     let pos = rect.position.to_logical::<f64>(scale);
-    let size = rect.size.to_logical::<f64>(scale);
-    LogicalPosition::new(
-        pos.x + size.width / 2.0 - width / 2.0,
-        pos.y + size.height + POPOVER_GAP,
-    )
+    let icon = rect.size.to_logical::<f64>(scale);
+    let x = (pos.x + icon.width / 2.0 - width / 2.0).clamp(0.0, (monitor.width - width).max(0.0));
+    let y = if pos.y + icon.height / 2.0 < monitor.height / 2.0 {
+        pos.y + icon.height + POPOVER_GAP
+    } else {
+        pos.y - POPOVER_GAP - height
+    };
+    LogicalPosition::new(x, y)
+}
+
+/// Clicking the tray icon on Windows first steals focus from the popover, which hides it, and
+/// then delivers the click, which would show it again. Ignore shows this soon after a blur-hide.
+pub const BLUR_GUARD: Duration = Duration::from_millis(250);
+
+/// When the popover was last hidden because it lost focus.
+pub struct HiddenAt(pub Mutex<Option<Instant>>);
+
+pub fn blur_guard_active(hidden_at: Option<Instant>, now: Instant) -> bool {
+    hidden_at.is_some_and(|t| now.duration_since(t) < BLUR_GUARD)
 }
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
@@ -461,8 +484,25 @@ fn toggle_popover(app: &AppHandle, rect: &Rect) {
         let _ = window.hide();
         return;
     }
+    let hidden_at = app
+        .try_state::<HiddenAt>()
+        .and_then(|h| *h.0.lock().unwrap_or_else(|p| p.into_inner()));
+    if blur_guard_active(hidden_at, Instant::now()) {
+        return;
+    }
     let scale = window.scale_factor().unwrap_or(1.0);
-    let _ = window.set_position(popover_origin(rect, scale, POPOVER_WIDTH));
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .map(|m| m.size().to_logical::<f64>(m.scale_factor()))
+        .unwrap_or_else(|| LogicalSize::new(1920.0, 1080.0));
+    let height = window
+        .outer_size()
+        .map(|s| s.to_logical::<f64>(scale).height)
+        .unwrap_or(240.0);
+    let _ = window.set_position(popover_origin(rect, scale, POPOVER_WIDTH, height, monitor));
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -491,6 +531,7 @@ mod tests {
     use super::*;
     use crate::settings::Settings;
     use crate::usage::{Quota, SESSION_SECS, WEEKLY_SECS};
+    use std::time::{Duration, Instant};
     use tauri::{LogicalSize, Position, Rect, Size};
 
     const NOW: i64 = 1_789_588_800;
@@ -699,14 +740,75 @@ mod tests {
         }
     }
 
+    const MONITOR: LogicalSize<f64> = LogicalSize {
+        width: 1440.0,
+        height: 900.0,
+    };
+
+    fn icon_rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
+        Rect {
+            position: Position::Logical(LogicalPosition::new(x, y)),
+            size: Size::Logical(LogicalSize::new(w, h)),
+        }
+    }
+
     #[test]
-    fn popover_is_centered_under_the_icon() {
-        let rect = Rect {
-            position: Position::Logical(LogicalPosition::new(1000.0, 0.0)),
-            size: Size::Logical(LogicalSize::new(120.0, 22.0)),
-        };
-        let origin = popover_origin(&rect, 2.0, 320.0);
+    fn popover_is_centered_under_a_menu_bar_icon() {
+        let origin = popover_origin(
+            &icon_rect(1000.0, 0.0, 120.0, 22.0),
+            2.0,
+            320.0,
+            240.0,
+            MONITOR,
+        );
         assert_eq!(origin.x, 900.0);
         assert_eq!(origin.y, 28.0);
+    }
+
+    #[test]
+    fn popover_sits_above_a_bottom_taskbar_icon() {
+        let origin = popover_origin(
+            &icon_rect(1200.0, 860.0, 24.0, 40.0),
+            1.0,
+            320.0,
+            240.0,
+            MONITOR,
+        );
+        assert_eq!(origin.x, 1052.0);
+        assert_eq!(origin.y, 860.0 - 6.0 - 240.0);
+    }
+
+    #[test]
+    fn popover_is_clamped_to_the_monitor_edges() {
+        let right = popover_origin(
+            &icon_rect(1406.0, 860.0, 24.0, 40.0),
+            1.0,
+            320.0,
+            240.0,
+            MONITOR,
+        );
+        assert_eq!(right.x, 1440.0 - 320.0);
+        let left = popover_origin(
+            &icon_rect(10.0, 0.0, 24.0, 22.0),
+            1.0,
+            320.0,
+            240.0,
+            MONITOR,
+        );
+        assert_eq!(left.x, 0.0);
+    }
+
+    #[test]
+    fn blur_guard_only_covers_the_first_250ms() {
+        let now = Instant::now();
+        assert!(!blur_guard_active(None, now));
+        assert!(blur_guard_active(
+            Some(now - Duration::from_millis(100)),
+            now
+        ));
+        assert!(!blur_guard_active(
+            Some(now - Duration::from_millis(400)),
+            now
+        ));
     }
 }

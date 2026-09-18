@@ -4,6 +4,7 @@ use claude_usage_monitor::poll::{self, Shared, Snapshot};
 use claude_usage_monitor::tray;
 use claude_usage_monitor::{alerts, log, settings};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_notification::NotificationExt;
 
@@ -106,6 +107,9 @@ fn main() {
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
                 let _ = window.hide();
+                if let Some(hidden) = window.app_handle().try_state::<tray::HiddenAt>() {
+                    *hidden.0.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
+                }
             }
         })
         .setup(move |app| {
@@ -117,6 +121,7 @@ fn main() {
             let settings = Arc::new(Mutex::new(initial));
             app.manage(settings.clone());
             app.manage(Mutex::new(alerts::AlertState::default()));
+            app.manage(tray::HiddenAt(Mutex::new(None)));
             tray::setup(app.handle())?;
             log::write(
                 app.handle(),
