@@ -30,6 +30,9 @@ pub fn should_notify(version: &str, notified: Option<&str>) -> bool {
     notified != Some(version)
 }
 
+pub fn check(_app: &tauri::AppHandle, _trigger: Trigger) {}
+pub fn install(_app: &tauri::AppHandle) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

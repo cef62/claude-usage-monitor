@@ -9,10 +9,11 @@ use crate::settings::{
     self, format_levels, parse_levels, PopoverSettings, Settings, INTERVAL_PRESETS, KEYS,
     SESSION_LEVEL_PRESETS, WEEKLY_LEVEL_PRESETS,
 };
+use crate::update;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Rect, WebviewWindow, Wry};
 use tauri_plugin_autostart::ManagerExt;
@@ -66,6 +67,8 @@ pub enum MenuAction {
     TestNotification,
     OpenLog,
     Autostart,
+    CheckUpdates,
+    InstallUpdate,
 }
 
 pub fn radio_id_levels(key: &str, levels: &[u8]) -> String {
@@ -88,6 +91,8 @@ pub fn parse_menu_id(id: &str) -> Option<MenuAction> {
         "test-notification" => return Some(MenuAction::TestNotification),
         "open-log" => return Some(MenuAction::OpenLog),
         "autostart" => return Some(MenuAction::Autostart),
+        "check-updates" => return Some(MenuAction::CheckUpdates),
+        "install-update" => return Some(MenuAction::InstallUpdate),
         _ => {}
     }
     if let Some(key) = id.strip_prefix("set:") {
@@ -283,6 +288,9 @@ pub struct HiddenAt(pub Mutex<Option<Instant>>);
 /// The tray rect of the last click, so a later resize can re-place the popover next to it.
 pub struct LastTrayRect(pub Mutex<Option<Rect>>);
 
+/// The "Install update…" item: text and enabled state follow `update::UpdateState`.
+pub struct UpdateItem(pub MenuItem<Wry>);
+
 pub fn blur_guard_active(hidden_at: Option<Instant>, now: Instant) -> bool {
     hidden_at.is_some_and(|t| now.duration_since(t) < BLUR_GUARD)
 }
@@ -354,8 +362,17 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     )?;
     items.insert("autostart".to_string(), autostart.clone());
     let open_log_item = MenuItemBuilder::with_id("open-log", "Open log").build(app)?;
+    let check_updates =
+        MenuItemBuilder::with_id("check-updates", "Check for updates…").build(app)?;
+    let install_update = MenuItemBuilder::with_id("install-update", "Install update…")
+        .enabled(false)
+        .build(app)?;
+    app.manage(UpdateItem(install_update.clone()));
     let help = SubmenuBuilder::new(app, "Help")
         .item(&open_log_item)
+        .separator()
+        .item(&check_updates)
+        .item(&install_update)
         .build()?;
     app.manage(MenuItems(items));
 
@@ -388,6 +405,14 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
             Some(MenuAction::TestNotification) => send_test_notification(app),
             Some(MenuAction::OpenLog) => open_log(app),
             Some(MenuAction::Autostart) => on_autostart_toggled(app),
+            Some(MenuAction::CheckUpdates) => {
+                let app = app.clone();
+                std::thread::spawn(move || update::check(&app, update::Trigger::Manual));
+            }
+            Some(MenuAction::InstallUpdate) => {
+                let app = app.clone();
+                std::thread::spawn(move || update::install(&app));
+            }
             None => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -812,6 +837,14 @@ mod tests {
         assert!(matches!(
             parse_menu_id("autostart"),
             Some(MenuAction::Autostart)
+        ));
+        assert!(matches!(
+            parse_menu_id("check-updates"),
+            Some(MenuAction::CheckUpdates)
+        ));
+        assert!(matches!(
+            parse_menu_id("install-update"),
+            Some(MenuAction::InstallUpdate)
         ));
         assert!(matches!(parse_menu_id("set:glyph"), Some(MenuAction::Toggle(k)) if k == "glyph"));
         assert!(matches!(
