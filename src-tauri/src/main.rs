@@ -157,6 +157,7 @@ fn main() {
             app.manage(Mutex::new(update::UpdateState::default()));
             app.manage(tray::LastTrayRect(Mutex::new(None)));
             tray::setup(app.handle())?;
+            update::spawn_checker(app.handle().clone());
             log::write(
                 app.handle(),
                 &format!("startup v{}", app.package_info().version),
