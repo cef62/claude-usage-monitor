@@ -91,6 +91,13 @@ Versions are managed with [Changesets](https://github.com/changesets/changesets)
 Never edit versions by hand and never create tags by hand. Builds are unsigned (ad-hoc on
 macOS); the release notes tell users how to open them.
 
+Release builds also produce updater artifacts (`.sig` files and `latest.json`) signed with a
+minisign key stored in the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; the matching public key lives in
+`src-tauri/tauri.conf.json` under `plugins.updater.pubkey`. Forks need their own keypair
+(`pnpm tauri signer generate`) — and the maintainer's private key must never be lost: installed
+apps only accept updates signed with it.
+
 ## Reporting a bug
 
 Include the OS and version, the app version (Releases page name or `CHANGELOG.md`), what you
