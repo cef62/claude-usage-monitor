@@ -14,6 +14,10 @@ pub const FIRST_CHECK_DELAY: Duration = Duration::from_secs(30);
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 3600);
 const _: () = assert!(FIRST_CHECK_DELAY.as_secs() < CHECK_INTERVAL.as_secs());
 
+/// Idle time between bytes before a check or download is abandoned. Without it a half-open
+/// socket leaves `busy` set until the app restarts.
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// What the last check found. The plugin's `Update` handle is kept so "Install" needs no
 /// second round-trip to the feed.
 #[derive(Default)]
@@ -75,7 +79,8 @@ fn begin(app: &AppHandle) -> bool {
     true
 }
 
-/// Release builds only: first check after `FIRST_CHECK_DELAY`, then every `CHECK_INTERVAL`.
+/// First check after `FIRST_CHECK_DELAY`, then every `CHECK_INTERVAL`. `check` itself is
+/// release builds only, so this just needs to exist without hammering the feed in dev.
 pub fn spawn_checker(app: AppHandle) {
     if cfg!(debug_assertions) {
         return;
@@ -89,16 +94,30 @@ pub fn spawn_checker(app: AppHandle) {
     });
 }
 
+/// Release builds only: a debug build never checks or installs, so `tauri dev` can't arm an
+/// update and rename its own `target/debug` out from under itself.
 pub fn check(app: &AppHandle, trigger: Trigger) {
     let manual = trigger == Trigger::Manual;
+    if cfg!(debug_assertions) {
+        if manual {
+            notify(app, "Updates are disabled in debug builds", "");
+        }
+        return;
+    }
     if !begin(app) {
         if manual {
-            notify(app, "Already checking…", "");
+            notify(app, "Update in progress…", "");
         }
         return;
     }
     // The lock is released here; the network call runs without it.
-    let result = tauri::async_runtime::block_on(async { app.updater()?.check().await });
+    let result = tauri::async_runtime::block_on(async {
+        app.updater_builder()
+            .configure_client(|c| c.read_timeout(READ_TIMEOUT))
+            .build()?
+            .check()
+            .await
+    });
     let mut st = state(app);
     st.busy = false;
     match result {
@@ -195,11 +214,6 @@ mod tests {
         assert!(should_notify("0.8.0", None));
         assert!(!should_notify("0.8.0", Some("0.8.0")));
         assert!(should_notify("0.8.1", Some("0.8.0")));
-    }
-
-    #[test]
-    fn first_check_comes_before_the_interval() {
-        assert!(FIRST_CHECK_DELAY < CHECK_INTERVAL);
     }
 
     #[test]
