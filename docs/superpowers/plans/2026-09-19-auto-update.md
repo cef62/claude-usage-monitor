@@ -15,7 +15,7 @@
 - Rust side only: no npm package, no capability entry, no frontend change.
 - Debug builds never check for updates (`cfg!(debug_assertions)` short-circuit in `spawn_checker`; the manual item still works in debug so it can be exercised, but hits the real feed).
 - Cadence: `FIRST_CHECK_DELAY = 30 s`, `CHECK_INTERVAL = 24 h`; const assert `FIRST_CHECK_DELAY < CHECK_INTERVAL`.
-- Notification copy (exact): available → title `Claude Usage Monitor {v} available`, body `Right-click the tray icon → Help → Install update`; up to date (manual only) → title `Up to date ({current})`, no body; check failed (manual only) → title `Update check failed`, body `{err}`; busy (manual only) → title `Already checking…`; install failed → title `Update failed`, body `{err}`.
+- Notification copy (exact): available → title `Claude Usage Monitor {v} available`, body `Right-click the tray icon → Help → Install update`; up to date (manual only) → title `Up to date ({current})`, no body; check failed (manual only) → title `Update check failed`, body `{err}`; busy (manual only) → title `Update in progress…`; install failed → title `Update failed`, body `{err}`.
 - Log lines (exact prefixes): `update available {v}`, `update none`, `update check failed {err}`, `update installing {v}`, `update download {pct}%` (at 25/50/75/100), `update installed {v}, restarting`, `update install failed {err}`.
 - Menu ids: `check-updates`, `install-update`. Install item text: `Install update…` disabled when nothing is stored; `Install update {v}…` enabled when an update is stored.
 - The `UpdateState` mutex is never held across a network call or `app.restart()`.

@@ -17,7 +17,7 @@ artifacts are minisign-signed so the app only installs what this repo's CI produ
 | Feed | `https://github.com/cef62/claude-usage-monitor/releases/latest/download/latest.json`, produced by `tauri-action` (`includeUpdaterJson: true`) and merged across the macOS/Windows matrix jobs |
 | Policy | Auto-check 30 s after startup and every 24 h; notify once per version; install only on click; manual "Check for updates…" |
 | Keys | minisign keypair generated locally with `tauri signer generate --ci`; public key committed in `tauri.conf.json`; private key + password stored only in `~/.tauri/` (user backs them up) and in the repo secrets `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
-| Debug builds | never check (`cfg!(debug_assertions)`), so `tauri dev` does not hit GitHub or try to replace itself |
+| Debug builds | never check (`cfg!(debug_assertions)`), so `tauri dev` does not hit GitHub or try to replace itself; manual checks answer `Updates are disabled in debug builds` |
 | Windows install | NSIS `installMode: "passive"` (progress bar, no questions); the installer relaunches the app |
 | macOS install | plugin swaps the `.app` bundle from `.app.tar.gz`, then `app.restart()` |
 | Failures | never surface a background failure (the repo is private until the user flips it, so 404s are expected for a while); log one line. Manual checks and installs report via notification |
@@ -55,8 +55,10 @@ pub fn spawn_checker(app: AppHandle);
 
 pub enum Trigger { Auto, Manual }
 
-/// Runs `app.updater()?.check()` on the async runtime (`tauri::async_runtime::block_on`),
-/// records the result in `UpdateState`, updates the menu item, notifies per the policy, logs.
+/// Runs `app.updater_builder().configure_client(|c| c.read_timeout(READ_TIMEOUT)).build()?.check()`
+/// on the async runtime (`tauri::async_runtime::block_on`), records the result in `UpdateState`,
+/// updates the menu item, notifies per the policy, logs. `READ_TIMEOUT = 60s` is an idle
+/// read timeout (idle-between-bytes), so a stalled socket can't pin `busy` until restart.
 pub fn check(app: &AppHandle, trigger: Trigger);
 
 /// Downloads and installs the stored `Update`, then `app.restart()`. Progress is logged every
@@ -73,7 +75,7 @@ pub fn install(app: &AppHandle);
 | error | log `update check failed <err>` | notification `Update check failed` / `<err>`; log |
 
 `busy` is checked-and-set under the lock before a check or install starts; a second request
-while busy is dropped (manual: notification `Already checking…`). The lock is never held across
+while busy is dropped (manual: notification `Update in progress…`). The lock is never held across
 the network call: take a snapshot, release, work, re-lock to store the result.
 
 `install` after a successful `download_and_install`: log `update installed v, restarting`, then
@@ -170,4 +172,6 @@ Manual (after the first release with the updater, say v0.8.0, and the repo publi
 
 Update packages are verified against the committed public key before install; a tampered or
 foreign `latest.json` is rejected by the plugin. The private key never enters the repo, the log,
-or chat. No new capabilities; the only new network destination is `github.com` release assets.
+or chat. No new capabilities; the only new network destinations are `github.com` (feed redirect),
+`api.github.com` (asset URLs written by tauri-action into `latest.json`) and
+`objects.githubusercontent.com` (asset download).
