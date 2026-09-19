@@ -123,8 +123,10 @@ with:
 ```
 
 `tauri-action` uploads `latest.json` (+ `.sig` files) and merges the platform entries when the
-second matrix job runs. `ci.yml` is unchanged: `pnpm tauri build --bundles app|nsis` without a
-key still builds the app bundles (updater artifacts are only produced when the key is set).
+second matrix job runs. With `createUpdaterArtifacts: true` every `tauri build` needs the private
+key (it refuses to run with only a public key configured), so `ci.yml`'s two build steps get the
+same two secrets in `env`. PRs from forks have no secret access and their build step fails —
+accepted for a single-maintainer repo.
 
 ### Keys (one-time, controller runs it)
 
