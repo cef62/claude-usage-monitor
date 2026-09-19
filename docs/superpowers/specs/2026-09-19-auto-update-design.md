@@ -133,10 +133,10 @@ accepted for a single-maintainer repo.
 ```bash
 mkdir -p ~/.tauri && chmod 700 ~/.tauri
 openssl rand -base64 24 > ~/.tauri/claude-usage-monitor.password && chmod 600 ~/.tauri/claude-usage-monitor.password
-TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(cat ~/.tauri/claude-usage-monitor.password)" \
-  pnpm tauri signer generate --ci -w ~/.tauri/claude-usage-monitor.key >/dev/null
+pnpm tauri signer generate --ci -p "$(cat ~/.tauri/claude-usage-monitor.password)" \
+  -w ~/.tauri/claude-usage-monitor.key >/dev/null   # --ci alone writes an UNENCRYPTED key; -p is required
 gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/claude-usage-monitor.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD < ~/.tauri/claude-usage-monitor.password
+printf '%s' "$(cat ~/.tauri/claude-usage-monitor.password)" | gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD   # no trailing newline
 ```
 
 Only `claude-usage-monitor.key.pub` is read into the repo. The user backs up the two private
