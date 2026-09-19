@@ -2,7 +2,7 @@
 
 use claude_usage_monitor::poll::{self, Shared, Snapshot};
 use claude_usage_monitor::tray;
-use claude_usage_monitor::{alerts, log, settings};
+use claude_usage_monitor::{alerts, log, settings, update};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
@@ -126,6 +126,7 @@ fn main() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
@@ -153,6 +154,7 @@ fn main() {
             app.manage(settings.clone());
             app.manage(Mutex::new(alerts::AlertState::default()));
             app.manage(tray::HiddenAt(Mutex::new(None)));
+            app.manage(Mutex::new(update::UpdateState::default()));
             app.manage(tray::LastTrayRect(Mutex::new(None)));
             tray::setup(app.handle())?;
             log::write(

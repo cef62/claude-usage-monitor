@@ -32,6 +32,7 @@
     }
   },
   "bundle": {
+    "createUpdaterArtifacts": true,
     "active": true,
     "targets": ["app", "dmg", "nsis"],
     "macOS": {
@@ -45,5 +46,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFEMjcxOTRFNEIxMzY0N0UKUldSK1pCTkxUaGtuSFpEK3orVHhWdTJLNkpWNG9xaFRQNkxLemVNWmNsTVRhYkgrNk8rT3dqODEK",
+      "endpoints": [
+        "https://github.com/cef62/claude-usage-monitor/releases/latest/download/latest.json"
+      ],
+      "windows": { "installMode": "passive" }
+    }
   }
 }
