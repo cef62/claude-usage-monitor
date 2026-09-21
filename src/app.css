@@ -177,3 +177,54 @@ footer {
   font-size: 11px;
   text-align: center;
 }
+
+footer button.version {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+.about h1 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+
+.about .version {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.about p {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.about ul {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.about li button {
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--track);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.about .thanks {
+  color: var(--muted);
+  font-size: 11px;
+}
