@@ -66,7 +66,13 @@ impl History {
 
 /// Even-stride thinning that always keeps the newest sample.
 pub fn downsample(samples: &[Sample], max: usize) -> Vec<Sample> {
-    if samples.len() <= max || max == 0 {
+    if max == 0 {
+        return Vec::new();
+    }
+    if max == 1 {
+        return samples.last().map(|s| vec![*s]).unwrap_or_default();
+    }
+    if samples.len() <= max {
         return samples.to_vec();
     }
     let last = samples.len() - 1;
@@ -213,5 +219,18 @@ mod tests {
         assert_eq!(load(&path), History::default());
         assert_eq!(load(&dir.join("missing.json")), History::default());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn downsample_handles_tiny_max() {
+        let all: Vec<Sample> = (0..1000).map(|i| Sample { t: i, pct: 0.0 }).collect();
+        let d = downsample(&all, 1);
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].t, 999);
+        let e = downsample(&all, 0);
+        assert_eq!(e.len(), 0);
+        let empty: Vec<Sample> = vec![];
+        let f = downsample(&empty, 1);
+        assert_eq!(f.len(), 0);
     }
 }
