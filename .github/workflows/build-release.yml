@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   # One job owns the GitHub Release so the platform builds never race to create it and a
-  # failure on one platform does not block the other's assets.
+  # failure on one platform does not block the other's assets. It is created as a draft:
+  # GitHub makes published releases immutable, so assets can only be added before publishing.
   create-release:
     runs-on: ubuntu-latest
     outputs:
@@ -22,7 +23,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft \
             --title "Claude Usage Monitor $TAG" \
             --notes "See CHANGELOG.md for details. macOS: the app is ad-hoc signed, not notarized: on first launch open System Settings → Privacy & Security and click Open Anyway, or run \`xattr -cr \"/Applications/Claude Usage Monitor.app\"\` once. Windows: the installer is unsigned. When SmartScreen appears, click More info → Run anyway."
           echo "id=$(gh release view "$TAG" --json databaseId -q .databaseId)" >> "$GITHUB_OUTPUT"
@@ -69,3 +70,13 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.id }}
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --draft=false
