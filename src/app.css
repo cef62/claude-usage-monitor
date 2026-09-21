@@ -143,6 +143,36 @@ body {
   background: var(--over);
 }
 
+.spark {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-top: 6px;
+  overflow: visible;
+}
+
+.spark polyline {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.card.warn .spark polyline {
+  stroke: var(--warn);
+}
+
+.card.over .spark polyline {
+  stroke: var(--over);
+}
+
+.spark .pace {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+
 .reset {
   margin: 0;
   color: var(--muted);

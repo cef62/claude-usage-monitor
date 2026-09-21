@@ -1,10 +1,12 @@
 //! Poll loop: owns the token for the duration of one request, applies the rate-limit
 //! discipline, and publishes a `Snapshot` for the tray and the popover.
 
+use crate::history;
 use crate::log;
 use crate::settings::{Settings, MAX_POLL_SECS, MIN_POLL_SECS};
 use crate::usage::{self, FetchError, Quota, USAGE_BASE_URL};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -37,6 +39,8 @@ pub struct Snapshot {
     pub plan: Option<String>,
     /// Overage credits from the usage response, when the account has extra usage enabled.
     pub extra: Option<usage::ExtraUsage>,
+    /// Downsampled per-window samples for the popover sparkline.
+    pub history: HashMap<String, Vec<history::Sample>>,
     pub fetched_at: Option<i64>,
     pub next_poll_at: i64,
     pub status: Status,
@@ -48,6 +52,7 @@ impl Default for Snapshot {
             quotas: Vec::new(),
             plan: None,
             extra: None,
+            history: HashMap::new(),
             fetched_at: None,
             next_poll_at: 0,
             status: Status::NoToken,
@@ -153,6 +158,7 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
     shared: Shared,
     settings: Arc<Mutex<Settings>>,
     log_path: Option<PathBuf>,
+    history_path: Option<PathBuf>,
     on_update: F,
 ) {
     std::thread::spawn(move || {
@@ -162,6 +168,10 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
         let mut last_success: Option<i64> = None;
         let mut latched_fingerprint: Option<u64> = None;
         let mut profile_for: Option<u64> = None;
+        let mut history = history_path
+            .as_deref()
+            .map(history::load)
+            .unwrap_or_default();
 
         loop {
             let now = now();
@@ -228,8 +238,17 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
                                 } else {
                                     None
                                 };
+                                if history.record(&quotas, now) {
+                                    if let Some(path) = &history_path {
+                                        // In-memory history is authoritative; a failed write only
+                                        // loses persistence across restarts.
+                                        let _ = history::save(path, &history);
+                                    }
+                                }
+                                let popover_history = history.for_popover();
                                 let mut s = lock(&shared);
                                 s.quotas = quotas;
+                                s.history = popover_history;
                                 s.extra = extra;
                                 if plan.is_some() {
                                     s.plan = plan;
@@ -396,6 +415,7 @@ mod tests {
         let snap = Snapshot {
             plan: None,
             extra: None,
+            history: HashMap::new(),
             quotas: vec![
                 Quota {
                     key: "session".into(),

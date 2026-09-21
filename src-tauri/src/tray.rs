@@ -51,10 +51,11 @@ const ALERT_LABELS: [(&str, &str); 3] = [
     ("alert_reset", "Notify on reset"),
 ];
 
-const POPOVER_LABELS: [(&str, &str); 3] = [
+const POPOVER_LABELS: [(&str, &str); 4] = [
     ("show_time_ticks", "Time ticks"),
     ("show_elapsed_marker", "Elapsed marker"),
     ("show_threshold_marks", "Threshold marks"),
+    ("show_history", "History line"),
 ];
 
 #[derive(Debug, PartialEq)]
@@ -708,6 +709,7 @@ mod tests {
             quotas,
             plan: None,
             extra: None,
+            history: HashMap::new(),
             fetched_at: Some(NOW),
             next_poll_at: NOW + 180,
             status,

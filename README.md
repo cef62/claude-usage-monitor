@@ -82,6 +82,9 @@ percentage used, a bar, the reset countdown and clock time. Overlays on the bar:
 - **Elapsed marker** — the white line: how far through the reset window you are. If the fill is
   past the marker you are spending faster than the clock and the bar turns red.
 - **Threshold marks** — small coloured ticks under the bar at each alert level.
+- **History line** — a small graph under the bar: how usage grew over the current reset window,
+  with a dotted diagonal for "on pace". The history is kept in `history.json` next to
+  `settings.json`, survives restarts and clears itself at each reset.
 
 A line above the cards names your plan (`Claude · Max 5x`), read once per login from the
 profile endpoint. If your account has extra usage (pay-as-you-go overage) switched on, an
@@ -117,7 +120,7 @@ Everything is in the right-click menu and persists across restarts:
 | Menu | Options |
 |---|---|
 | **Menu bar** (macOS) / **Tray** (Windows) | Session · Weekly · Glyphs (`◷` / `▦`) · Percent · Remaining time. At least one quota and one of Percent/Remaining stay on. On Windows, Session/Weekly also hide the matching bar in the icon; the other three shape the tooltip. |
-| **Popover** | Time ticks · Elapsed marker · Threshold marks |
+| **Popover** | Time ticks · Elapsed marker · Threshold marks · History line |
 | **Alerts** | Session · Weekly (on/off) · Notify on reset · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
 | **Check every** | 3 · 5 · 10 · 15 minutes (the API rate-limits below 2 minutes, so that is the floor) |
 | **Start at login** | registers the app as a login item (macOS: System Settings → General → Login Items, "Allow in the Background"; Windows: `HKCU\…\Run`). Off by default; the check mark always shows what the OS reports. Toggle it from the installed app, not from `pnpm tauri dev`. |
