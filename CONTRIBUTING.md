@@ -91,6 +91,14 @@ Versions are managed with [Changesets](https://github.com/changesets/changesets)
 Never edit versions by hand and never create tags by hand. Builds are unsigned (ad-hoc on
 macOS); the release notes tell users how to open them.
 
+The release is created as a draft, both platforms upload into it, and a final job publishes it
+(GitHub makes published releases immutable). The platform jobs run with `fail-fast: false`, so
+if one platform fails the other still uploads — but the failed platform gets no entry in
+`latest.json` and its installed apps log a failed update check daily until the next release.
+Re-run the failed job from the Actions tab; or, once the workflow itself has changed, rebuild
+a tag with `gh workflow run build-release.yml --ref main -f tag=vX.Y.Z` (delete the empty
+release first if the publish step already ran).
+
 Release builds also produce updater artifacts (`.sig` files and `latest.json`) signed with a
 minisign key stored in the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; the matching public key lives in

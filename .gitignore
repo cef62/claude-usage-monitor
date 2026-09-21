@@ -26,3 +26,6 @@ test-results/
 
 # History drafts are committed; nothing to ignore there
 .superpowers/
+
+# local backup of the updater signing key (never commit)
+/.secrets/
