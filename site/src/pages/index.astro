@@ -3,6 +3,8 @@ import Base from '../layouts/Base.astro';
 import macTray from '../../../docs/screenshots/mac-tray.png';
 import macPopover from '../../../docs/screenshots/mac-popover.png';
 import macMenu from '../../../docs/screenshots/mac-menu.png';
+import macHelp from '../../../docs/screenshots/mac-help-menu.png';
+import macAbout from '../../../docs/screenshots/mac-about.png';
 import winTray from '../../../docs/screenshots/win-tray.png';
 import pkg from '../../../package.json';
 
@@ -40,6 +42,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       alt="Right-click menu"
     />
     <img src={winTray.src} width={winTray.width} height={winTray.height} alt="Windows tray" />
+    <img src={macHelp.src} width={macHelp.width} height={macHelp.height} alt="Help submenu" />
+    <img src={macAbout.src} width={macAbout.width} height={macAbout.height} alt="About view" />
   </div>
 
   <div class="downloads">

@@ -23,6 +23,10 @@ Website: https://cef62.github.io/claude-usage-monitor/ — downloads, guide and 
 |---|---|
 | ![Popover](docs/screenshots/mac-popover.png) | ![Menu](docs/screenshots/mac-menu.png) |
 
+| Help submenu | About |
+|---|---|
+| ![Help submenu](docs/screenshots/mac-help-menu.png) | ![About](docs/screenshots/mac-about.png) |
+
 ## Install
 
 Download the latest build from the
