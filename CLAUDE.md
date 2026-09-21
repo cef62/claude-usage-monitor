@@ -9,13 +9,14 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1.5 (launch at login) implemented; released via the Changesets pipeline.
+**Status:** v1.7 (auto-update) implemented; released via the Changesets pipeline.
 Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 `docs/superpowers/specs/2026-09-17-ci-release-design.md`,
 `docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`,
 `docs/superpowers/specs/2026-09-17-threshold-alerts-design.md`,
 `docs/superpowers/specs/2026-09-17-config-and-log-design.md`,
-`docs/superpowers/specs/2026-09-18-windows-tray-design.md`.
+`docs/superpowers/specs/2026-09-18-windows-tray-design.md`,
+`docs/superpowers/specs/2026-09-19-auto-update-design.md`.
 
 ## Reference Material (read before writing code)
 
@@ -32,8 +33,9 @@ Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 - Tauri 2 (`tauri`, `tauri-build`, `@tauri-apps/api`). Plugins only when a native feature needs
   them: `tauri-plugin-opener` for external links (see Tauri Rules), `tauri-plugin-notification`
   for alerts, `tauri-plugin-autostart` (LaunchAgent / HKCU Run) for "Start at login" — the OS is
-  the only source of truth, nothing in `settings.json` — and the `tray-icon` feature for the menu
-  bar / tray.
+  the only source of truth, nothing in `settings.json` — `tauri-plugin-updater` (daily check,
+  minisign-signed artifacts, feed = latest GitHub Release), and the `tray-icon` feature for the
+  menu bar / tray.
 - Rust stable, edition 2021. `reqwest` (rustls, native certs so corporate proxies work) +
   `serde`/`serde_json` for the usage API. Keep the usage JSON as `serde_json::Value` at the
   edge and normalize into a small typed struct — the API adds code-named fields without notice.
@@ -69,6 +71,7 @@ src-tauri/
   src/alerts.rs            threshold alert state machine (pure)
   src/icon.rs              Windows tray icon renderer (pure RGBA)
   src/log.rs               capped local log (never the token)
+  src/update.rs            update check / install glue (tauri-plugin-updater)
   icons/
 test/                      Vitest specs for src/lib
 ```
@@ -125,7 +128,7 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
   `panic = "abort"`. `main.rs` starts with
   `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`.
 - The app is ad-hoc signed (`signingIdentity: "-"`), not notarized, until an Apple Developer
-  account exists. No auto-updater until asked.
+  account exists. The updater verifies minisign signatures, so unsigned OS bundles are fine.
 
 ## Commands
 

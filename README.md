@@ -41,7 +41,7 @@ Both builds are unsigned (no Apple Developer / code-signing certificate), so the
 Prerequisite on both: [Claude Code](https://docs.claude.com/en/docs/claude-code) installed and
 logged in (`claude auth login`). The app reuses that login; it never asks for credentials.
 
-There is no auto-updater yet: to update, install the newer build over the old one.
+Later versions install themselves (see Updates).
 
 ## Use
 
@@ -93,6 +93,16 @@ nag you. When a quota that reached its top level rolls into a new window, a "res
 notification tells you it is back to 0 % (**Notify on reset**, on by default). The first
 notification triggers the OS permission prompt — allow it.
 
+### Updates
+
+The app checks the [Releases page](https://github.com/cef62/claude-usage-monitor/releases/latest)
+30 seconds after launch and then once a day. When a newer version exists you get one
+notification per version and **Help → Install update x.y.z…** appears in the tray menu: click it
+to download, install and relaunch (Windows shows the installer's progress bar). **Help → Check
+for updates…** checks on demand and reports the result as a notification. Update packages are
+signature-checked against a key built into the app, so only releases from this repository
+install. Builds older than 0.8.0 have no updater: install 0.8.0 by hand once.
+
 ## Configure
 
 Everything is in the right-click menu and persists across restarts:
@@ -124,7 +134,7 @@ full stop on `401` until you log in again.
 
 ## Not yet
 
-Code signing / notarization, auto-update, Windows ARM64, Linux.
+Code signing / notarization, Windows ARM64, Linux.
 
 ## Contributing
 

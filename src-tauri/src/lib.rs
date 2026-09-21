@@ -5,4 +5,5 @@ pub mod log;
 pub mod poll;
 pub mod settings;
 pub mod tray;
+pub mod update;
 pub mod usage;
