@@ -92,11 +92,8 @@ pub fn load(path: &Path) -> History {
 }
 
 pub fn save(path: &Path, h: &History) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
     let json = serde_json::to_vec(h).map_err(std::io::Error::other)?;
-    std::fs::write(path, json)
+    crate::settings::write_atomic(path, &json)
 }
 
 #[cfg(test)]

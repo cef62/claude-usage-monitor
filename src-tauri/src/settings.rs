@@ -236,11 +236,19 @@ pub fn load(path: &Path) -> Settings {
 }
 
 pub fn save(path: &Path, s: &Settings) -> std::io::Result<()> {
+    let json = serde_json::to_string_pretty(s).map_err(std::io::Error::other)?;
+    write_atomic(path, format!("{json}\n").as_bytes())
+}
+
+/// Write to a sibling temp file and rename over the target, so a crash mid-write leaves the
+/// previous file intact instead of a truncated one that loads as defaults.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let json = serde_json::to_string_pretty(s).map_err(std::io::Error::other)?;
-    std::fs::write(path, format!("{json}\n"))
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
 }
 
 pub fn path(app: &AppHandle) -> Option<PathBuf> {
@@ -252,6 +260,7 @@ pub fn path(app: &AppHandle) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use super::write_atomic;
     use super::{
         format_levels, load, parse_levels, save, PopoverSettings, Settings, KEYS, MAX_POLL_SECS,
         MIN_POLL_SECS,
@@ -472,5 +481,16 @@ mod tests {
         assert!(!s.alert_session);
         assert_eq!(s.poll_interval_secs, 180);
         assert_eq!(s.session_levels, vec![80, 95]);
+    }
+
+    #[test]
+    fn write_atomic_replaces_the_file_and_leaves_no_temp() {
+        let dir = std::env::temp_dir().join(format!("cum-atomic-{}", std::process::id()));
+        let path = dir.join("settings.json");
+        write_atomic(&path, b"one").expect("first write");
+        write_atomic(&path, b"two").expect("second write");
+        assert_eq!(std::fs::read(&path).expect("read"), b"two");
+        assert!(!path.with_extension("tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
