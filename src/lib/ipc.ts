@@ -41,6 +41,16 @@ export const FIXTURE: Snapshot = {
   fetched_at: nowSecs - 42,
   next_poll_at: nowSecs + 138,
   status: { kind: 'ok' },
+  history: {
+    session: Array.from({ length: 30 }, (_, i) => ({
+      t: nowSecs - 2 * 3600 + i * 240,
+      pct: Math.min(48, i * 1.7),
+    })),
+    weekly: Array.from({ length: 40 }, (_, i) => ({
+      t: weeklyReset - WEEKLY_SECS + i * 8640,
+      pct: Math.min(64, i * 1.8),
+    })),
+  },
 };
 
 export async function getSnapshot(): Promise<Snapshot> {

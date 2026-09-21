@@ -11,6 +11,7 @@ import {
   markClass,
   money,
   relative,
+  sparkPoints,
 } from '@/lib/format';
 import {
   getAbout,
@@ -24,7 +25,7 @@ import {
   quit,
   resizePopover,
 } from '@/lib/ipc';
-import type { ExtraUsage, PopoverSettings, Quota, Snapshot, Status } from '@/lib/quota';
+import type { ExtraUsage, PopoverSettings, Quota, Sample, Snapshot, Status } from '@/lib/quota';
 import { DEFAULT_POPOVER_SETTINGS, SESSION_SECS } from '@/lib/quota';
 
 const USAGE_URL = 'https://claude.ai/settings/usage';
@@ -61,7 +62,17 @@ function levelsFor(q: Quota, s: PopoverSettings): number[] {
   return [];
 }
 
-function QuotaCard({ q, now, settings }: { q: Quota; now: number; settings: PopoverSettings }) {
+function QuotaCard({
+  q,
+  now,
+  settings,
+  history,
+}: {
+  q: Quota;
+  now: number;
+  settings: PopoverSettings;
+  history: Sample[];
+}) {
   const elapsed = elapsedPct(q, now);
   const color = barColor(q.percent, elapsed);
   const tickCount = q.period_secs === SESSION_SECS ? 5 : 7;
@@ -87,6 +98,15 @@ function QuotaCard({ q, now, settings }: { q: Quota; now: number; settings: Popo
             />
           ))}
       </div>
+      {settings.show_history && history.length >= 2 && (
+        <svg className="spark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
+          <title>Usage over this window</title>
+          <line className="pace" x1="0" y1="28" x2="100" y2="0" />
+          <polyline
+            points={sparkPoints(history, q.resets_at - q.period_secs, q.period_secs, 100, 28)}
+          />
+        </svg>
+      )}
       <p className="reset">
         Resets in {countdown(q.resets_at - now)} · {clock(q.resets_at, now)}
       </p>
@@ -219,7 +239,13 @@ export default function App() {
       {banner && <div className={`banner ${snap.status.kind}`}>{banner}</div>}
       {snap.quotas.length === 0 && !banner && <p className="empty">No usage data yet</p>}
       {snap.quotas.map((q) => (
-        <QuotaCard key={q.key} q={q} now={now} settings={settings} />
+        <QuotaCard
+          key={q.key}
+          q={q}
+          now={now}
+          settings={settings}
+          history={snap.history[q.key] ?? []}
+        />
       ))}
       {snap.extra && <ExtraCard e={snap.extra} />}
       <nav className="links">

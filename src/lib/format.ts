@@ -1,4 +1,4 @@
-import type { ExtraUsage, Quota } from './quota';
+import type { ExtraUsage, Quota, Sample } from './quota';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -67,4 +67,26 @@ export function extraPct(e: ExtraUsage): number | null {
   if (e.utilization !== null) return e.utilization;
   if (e.limit !== null && e.limit > 0) return (e.used / e.limit) * 100;
   return null;
+}
+
+// SVG polyline points for a sparkline over one reset window. Empty below two samples.
+export function sparkPoints(
+  samples: Sample[],
+  windowStart: number,
+  period: number,
+  w: number,
+  h: number,
+): string {
+  if (samples.length < 2 || period <= 0) return '';
+  return samples
+    .map((s) => {
+      const x = Math.min(w, Math.max(0, ((s.t - windowStart) / period) * w));
+      const y = h - (Math.min(100, Math.max(0, s.pct)) / 100) * h;
+      return `${round(x)},${round(y)}`;
+    })
+    .join(' ');
+}
+
+function round(n: number): number {
+  return Math.round(n * 10) / 10;
 }
