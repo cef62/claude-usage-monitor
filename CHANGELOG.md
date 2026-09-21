@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.11.2
+
+### Patch Changes
+
+- ce062ae: Project website at https://cef62.github.io/claude-usage-monitor/ with downloads, guide and changelog.
+
 ## 0.11.1
 
 ### Patch Changes
