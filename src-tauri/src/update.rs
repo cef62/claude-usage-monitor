@@ -2,8 +2,9 @@
 //! install on request from the tray menu. Delivery goes through tauri-plugin-updater.
 
 use crate::log;
+use crate::settings::Settings;
 use crate::tray::UpdateItem;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
@@ -41,6 +42,13 @@ pub fn should_notify(version: &str, notified: Option<&str>) -> bool {
     notified != Some(version)
 }
 
+fn auto_check_enabled(app: &AppHandle) -> bool {
+    app.state::<Arc<Mutex<Settings>>>()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .auto_update_check
+}
+
 fn state(app: &AppHandle) -> MutexGuard<'_, UpdateState> {
     app.state::<Mutex<UpdateState>>()
         .inner()
@@ -54,6 +62,37 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
         n = n.body(body);
     }
     let _ = n.show();
+}
+
+pub const FALLBACK_BODY: &str = "Right-click the tray icon → Help → Install update";
+const SUMMARY_CHARS: usize = 120;
+
+/// First changelog bullet of the release notes (`- <sha>: text` or `- text`), trimmed to fit a
+/// notification; the menu hint when the notes carry no bullet.
+pub fn notes_summary(body: Option<&str>) -> String {
+    let bullet = body
+        .unwrap_or("")
+        .lines()
+        .map(str::trim)
+        .find_map(|l| l.strip_prefix("- "))
+        .map(|l| match l.split_once(": ") {
+            Some((sha, rest)) if sha.len() == 7 && sha.chars().all(|c| c.is_ascii_hexdigit()) => {
+                rest
+            }
+            _ => l,
+        })
+        .map(str::trim)
+        .filter(|l| !l.is_empty());
+    let Some(text) = bullet else {
+        return FALLBACK_BODY.to_string();
+    };
+    if text.chars().count() <= SUMMARY_CHARS {
+        text.to_string()
+    } else {
+        let mut cut: String = text.chars().take(SUMMARY_CHARS - 1).collect();
+        cut.push('…');
+        cut
+    }
 }
 
 pub fn install_item_text(version: Option<&str>) -> String {
@@ -90,7 +129,10 @@ pub fn spawn_checker(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(FIRST_CHECK_DELAY);
         loop {
-            check(&app, Trigger::Auto);
+            // The loop keeps running while auto-check is off so re-enabling needs no restart.
+            if auto_check_enabled(&app) {
+                check(&app, Trigger::Auto);
+            }
             // Short naps instead of one long sleep: a laptop asleep for a day would otherwise
             // push the next check a day further out.
             let due = std::time::Instant::now() + CHECK_INTERVAL;
@@ -130,6 +172,7 @@ pub fn check(app: &AppHandle, trigger: Trigger) {
     match result {
         Ok(Some(update)) => {
             let version = update.version.clone();
+            let body = notes_summary(update.body.as_deref());
             st.available = Some(update);
             let announce = manual || should_notify(&version, st.notified.as_deref());
             if announce {
@@ -141,7 +184,7 @@ pub fn check(app: &AppHandle, trigger: Trigger) {
                 notify(
                     app,
                     &format!("Claude Usage Monitor {version} available"),
-                    "Right-click the tray icon → Help → Install update",
+                    &body,
                 );
             }
             log::write(app, &format!("update available {version}"));
@@ -229,5 +272,20 @@ mod tests {
     fn install_item_text_names_the_version() {
         assert_eq!(install_item_text(None), "Install update…");
         assert_eq!(install_item_text(Some("0.8.1")), "Install update 0.8.1…");
+    }
+
+    #[test]
+    fn notes_summary_takes_the_first_bullet() {
+        let body = "## 0.8.2\n\n### Patch Changes\n\n- 1a2b3c4: Reset notification once per window.\n- 5d6e7f8: Second line.\n\nmacOS: open anyway.";
+        assert_eq!(
+            notes_summary(Some(body)),
+            "Reset notification once per window."
+        );
+        assert_eq!(notes_summary(None), FALLBACK_BODY);
+        assert_eq!(notes_summary(Some("no bullets here")), FALLBACK_BODY);
+        let long = format!("- {}", "x".repeat(200));
+        let out = notes_summary(Some(&long));
+        assert_eq!(out.chars().count(), 120);
+        assert!(out.ends_with('…'));
     }
 }

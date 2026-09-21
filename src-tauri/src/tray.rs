@@ -368,9 +368,19 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .enabled(false)
         .build(app)?;
     app.manage(UpdateItem(install_update.clone()));
+    let auto_check = CheckMenuItem::with_id(
+        app,
+        "set:auto_update_check",
+        "Check for updates automatically",
+        true,
+        current.get("auto_update_check"),
+        None::<&str>,
+    )?;
+    items.insert("auto_update_check".to_string(), auto_check.clone());
     let help = SubmenuBuilder::new(app, "Help")
         .item(&open_log_item)
         .separator()
+        .item(&auto_check)
         .item(&check_updates)
         .item(&install_update)
         .build()?;
