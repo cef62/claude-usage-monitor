@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.9.0
+
+### Minor Changes
+
+- 62c4a1b: About view: Help → About… (or the version in the popover footer) shows the installed version with links to the repository, release notes, issue tracker and license.
+
 ## 0.8.2
 
 ### Patch Changes
