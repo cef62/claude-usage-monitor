@@ -29,3 +29,6 @@ test-results/
 
 # local backup of the updater signing key (never commit)
 /.secrets/
+
+# git worktrees live nested here (superpowers:using-git-worktrees)
+/.worktrees/
