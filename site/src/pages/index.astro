@@ -1,0 +1,77 @@
+---
+import Base from '../layouts/Base.astro';
+import macTray from '../../../docs/screenshots/mac-tray.png';
+import macPopover from '../../../docs/screenshots/mac-popover.png';
+import macMenu from '../../../docs/screenshots/mac-menu.png';
+import winTray from '../../../docs/screenshots/win-tray.png';
+import pkg from '../../../package.json';
+
+const version = pkg.version;
+const releaseBase = `https://github.com/cef62/claude-usage-monitor/releases/download/v${version}`;
+const macAsset = `Claude.Usage.Monitor_${version}_aarch64.dmg`;
+const winAsset = `Claude.Usage.Monitor_${version}_x64-setup.exe`;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<Base title="Claude Usage Monitor">
+  <div class="hero">
+    <h1>Claude Usage Monitor</h1>
+    <p>
+      A tiny menu bar (macOS) / system tray (Windows) app that shows how much of your Claude
+      plan you have used: the percentage consumed in the 5-hour session window and in the
+      weekly window, and the countdown to each reset. It reuses the login Claude Code already
+      has on your machine — nothing else to configure. MIT licensed, not affiliated with
+      Anthropic.
+    </p>
+  </div>
+
+  <div class="screenshots">
+    <img src={macTray.src} width={macTray.width} height={macTray.height} alt="macOS menu bar" />
+    <img
+      src={macPopover.src}
+      width={macPopover.width}
+      height={macPopover.height}
+      alt="Popover with usage bars"
+    />
+    <img
+      src={macMenu.src}
+      width={macMenu.width}
+      height={macMenu.height}
+      alt="Right-click menu"
+    />
+    <img src={winTray.src} width={winTray.width} height={winTray.height} alt="Windows tray" />
+  </div>
+
+  <div class="downloads">
+    <a class="button" href={`${releaseBase}/${macAsset}`}>macOS (Apple Silicon) · v{version}</a>
+    <a class="button" href={`${releaseBase}/${winAsset}`}>Windows x64 · v{version}</a>
+  </div>
+  <p class="downloads-note">
+    <a href="https://github.com/cef62/claude-usage-monitor/releases">All releases</a>
+  </p>
+  <p class="downloads-note">
+    macOS: the app is unsigned — System Settings → Privacy &amp; Security → Open Anyway, or run
+    <code>xattr -cr</code> once.
+  </p>
+  <p class="downloads-note">
+    Windows: the installer is unsigned — SmartScreen → More info → Run anyway.
+  </p>
+  <p class="downloads-note">
+    Requires <a href="https://docs.claude.com/en/docs/claude-code">Claude Code</a> installed and
+    logged in (<code>claude auth login</code>).
+  </p>
+
+  <div class="how-it-works">
+    <h2>How it works</h2>
+    <p>
+      The app reads the Claude Code OAuth token already on your machine and calls
+      <code>api.anthropic.com/api/oauth/usage</code>. The API returns percentages only — there
+      are no token counts anywhere. The token is never stored, logged, or sent anywhere but
+      <code>api.anthropic.com</code>.
+    </p>
+    <p>
+      See the <a href={`${base}/guide/`}>Guide</a> for the full README, or the
+      <a href={`${base}/changelog/`}>Changelog</a> for release history.
+    </p>
+  </div>
+</Base>
