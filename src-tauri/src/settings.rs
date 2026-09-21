@@ -17,6 +17,7 @@ pub struct Settings {
     pub alert_session: bool,
     pub alert_weekly: bool,
     pub alert_reset: bool,
+    pub auto_update_check: bool,
     pub show_time_ticks: bool,
     pub show_elapsed_marker: bool,
     pub show_threshold_marks: bool,
@@ -36,6 +37,7 @@ impl Default for Settings {
             alert_session: true,
             alert_weekly: true,
             alert_reset: true,
+            auto_update_check: true,
             show_time_ticks: true,
             show_elapsed_marker: true,
             show_threshold_marks: true,
@@ -46,7 +48,7 @@ impl Default for Settings {
     }
 }
 
-pub const KEYS: [&str; 11] = [
+pub const KEYS: [&str; 12] = [
     "session",
     "weekly",
     "glyph",
@@ -55,6 +57,7 @@ pub const KEYS: [&str; 11] = [
     "alert_session",
     "alert_weekly",
     "alert_reset",
+    "auto_update_check",
     "show_time_ticks",
     "show_elapsed_marker",
     "show_threshold_marks",
@@ -76,6 +79,7 @@ impl Settings {
             "alert_session" => self.alert_session,
             "alert_weekly" => self.alert_weekly,
             "alert_reset" => self.alert_reset,
+            "auto_update_check" => self.auto_update_check,
             "show_time_ticks" => self.show_time_ticks,
             "show_elapsed_marker" => self.show_elapsed_marker,
             "show_threshold_marks" => self.show_threshold_marks,
@@ -93,7 +97,7 @@ impl Settings {
             "percent" => self.remaining,
             "remaining" => self.percent,
             "glyph" => true,
-            "alert_session" | "alert_weekly" | "alert_reset" => true,
+            "alert_session" | "alert_weekly" | "alert_reset" | "auto_update_check" => true,
             "show_time_ticks" | "show_elapsed_marker" | "show_threshold_marks" => true,
             _ => return false,
         };
@@ -109,6 +113,7 @@ impl Settings {
             "alert_session" => self.alert_session = !self.alert_session,
             "alert_weekly" => self.alert_weekly = !self.alert_weekly,
             "alert_reset" => self.alert_reset = !self.alert_reset,
+            "auto_update_check" => self.auto_update_check = !self.auto_update_check,
             "show_time_ticks" => self.show_time_ticks = !self.show_time_ticks,
             "show_elapsed_marker" => self.show_elapsed_marker = !self.show_elapsed_marker,
             "show_threshold_marks" => self.show_threshold_marks = !self.show_threshold_marks,
@@ -340,9 +345,13 @@ mod tests {
 
     #[test]
     fn alert_keys_toggle_freely() {
-        assert_eq!(KEYS.len(), 11);
+        assert_eq!(KEYS.len(), 12);
         let mut s = Settings::default();
         assert!(s.alert_session && s.alert_weekly && s.alert_reset);
+        assert!(s.auto_update_check);
+        assert!(s.toggle("auto_update_check"));
+        assert!(!s.get("auto_update_check"));
+        assert!(s.toggle("auto_update_check"));
         assert!(s.toggle("alert_reset"));
         assert!(!s.get("alert_reset"));
         assert!(s.toggle("alert_reset"));
@@ -367,7 +376,7 @@ mod tests {
     #[test]
     fn new_fields_default() {
         let s = Settings::default();
-        assert_eq!(KEYS.len(), 11);
+        assert_eq!(KEYS.len(), 12);
         assert!(s.show_time_ticks && s.show_elapsed_marker && s.show_threshold_marks);
         assert_eq!(s.session_levels, vec![80, 95]);
         assert_eq!(s.weekly_levels, vec![95]);

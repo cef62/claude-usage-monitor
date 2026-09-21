@@ -98,8 +98,10 @@ notification triggers the OS permission prompt — allow it.
 The app checks the [Releases page](https://github.com/cef62/claude-usage-monitor/releases/latest)
 30 seconds after launch and then once a day. When a newer version exists you get one
 notification per version and **Help → Install update x.y.z…** appears in the tray menu: click it
-to download, install and relaunch (Windows shows the installer's progress bar). **Help → Check
-for updates…** checks on demand and reports the result as a notification. Update packages are
+to download, install and relaunch (Windows shows the installer's progress bar). The notification
+shows the first line of that version's release notes. **Help → Check for updates…** checks on
+demand and reports the result as a notification; **Help → Check for updates automatically**
+turns the daily check off (the manual item keeps working). Update packages are
 signature-checked against a key built into the app, so only releases from this repository
 install. Builds older than 0.8.0 have no updater: install 0.8.0 by hand once.
 
@@ -114,6 +116,7 @@ Everything is in the right-click menu and persists across restarts:
 | **Alerts** | Session · Weekly (on/off) · Notify on reset · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
 | **Check every** | 3 · 5 · 10 · 15 minutes (the API rate-limits below 2 minutes, so that is the floor) |
 | **Start at login** | registers the app as a login item (macOS: System Settings → General → Login Items, "Allow in the Background"; Windows: `HKCU\…\Run`). Off by default; the check mark always shows what the OS reports. Toggle it from the installed app, not from `pnpm tauri dev`. |
+| **Help → Check for updates automatically** | daily background check on/off (default on); **Check for updates…** always works |
 | **Help → Open log** | reveals `claude-usage-monitor.log`: poll results, alerts, settings changes — never your token. Rotates at 1 MB. Attach it when reporting a problem. |
 
 Settings file (hand-editing is fine; `session_levels` / `weekly_levels` accept any 1–100 values,
