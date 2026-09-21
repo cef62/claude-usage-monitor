@@ -7,6 +7,10 @@ interface TextNode {
   type: 'text';
   value: string;
 }
+interface InlineCodeNode {
+  type: 'inlineCode';
+  value: string;
+}
 interface LinkNode {
   type: 'link';
   url: string;
@@ -14,7 +18,7 @@ interface LinkNode {
 }
 interface ParagraphNode {
   type: 'paragraph';
-  children: (TextNode | LinkNode)[];
+  children: (TextNode | LinkNode | InlineCodeNode)[];
 }
 interface ListItemNode {
   type: 'listItem';
@@ -70,6 +74,29 @@ describe('remarkCommitLinks', () => {
     remarkCommitLinks()(tree);
 
     expect(paragraph.children).toEqual([{ type: 'text', value: 'Just a note.' }]);
+  });
+
+  it('leaves later inline-formatting siblings (e.g. inline code) untouched', () => {
+    const inlineCode: InlineCodeNode = { type: 'inlineCode', value: 'code' };
+    const paragraph: ParagraphNode = {
+      type: 'paragraph',
+      children: [{ type: 'text', value: 'abc1234: text with ' }, inlineCode],
+    };
+    const tree: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'list', children: [{ type: 'listItem', children: [paragraph] }] }],
+    };
+
+    remarkCommitLinks()(tree);
+
+    expect(paragraph.children[0]).toEqual({
+      type: 'link',
+      url: 'https://github.com/cef62/claude-usage-monitor/commit/abc1234',
+      children: [{ type: 'text', value: 'abc1234' }],
+    });
+    expect(paragraph.children[1]).toEqual({ type: 'text', value: ' text with ' });
+    // The inlineCode node must survive the splice unchanged, at the tail of the array.
+    expect(paragraph.children[2]).toBe(inlineCode);
   });
 
   it('walks nested structures to find list items anywhere in the tree', () => {

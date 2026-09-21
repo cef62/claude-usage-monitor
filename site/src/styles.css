@@ -104,7 +104,8 @@ main table {
      same way `main pre` already does. */
   display: block;
   overflow-x: auto;
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
 }

@@ -5,7 +5,9 @@ const REPO = 'https://github.com/cef62/claude-usage-monitor';
 
 function walk(node) {
   if (node.type === 'element') {
-    const props = node.properties ?? {};
+    // hast elements always carry `properties`; a `?? {}` fallback would be a detached
+    // object whose mutations are silently lost.
+    const props = node.properties;
     if (node.tagName === 'img' && typeof props.src === 'string' && !SKIP.test(props.src)) {
       props.src = `${REPO.replace('github.com', 'raw.githubusercontent.com')}/main/${props.src}`;
     }
