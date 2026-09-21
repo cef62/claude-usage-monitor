@@ -2,7 +2,7 @@
 
 use claude_usage_monitor::poll::{self, Shared, Snapshot};
 use claude_usage_monitor::tray;
-use claude_usage_monitor::{alerts, log, settings, update};
+use claude_usage_monitor::{alerts, history, log, settings, update};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
@@ -184,11 +184,17 @@ fn main() {
                 &format!("startup v{}", app.package_info().version),
             );
             let handle = app.handle().clone();
-            poll::run(shared, settings, log::path(app.handle()), move |snapshot| {
-                tray::refresh(&handle, snapshot);
-                notify_thresholds(&handle, snapshot);
-                let _ = handle.emit("usage", snapshot);
-            });
+            poll::run(
+                shared,
+                settings,
+                log::path(app.handle()),
+                history::path(app.handle()),
+                move |snapshot| {
+                    tray::refresh(&handle, snapshot);
+                    notify_thresholds(&handle, snapshot);
+                    let _ = handle.emit("usage", snapshot);
+                },
+            );
             Ok(())
         })
         .run(tauri::generate_context!())

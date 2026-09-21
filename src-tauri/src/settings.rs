@@ -21,6 +21,7 @@ pub struct Settings {
     pub show_time_ticks: bool,
     pub show_elapsed_marker: bool,
     pub show_threshold_marks: bool,
+    pub show_history: bool,
     pub session_levels: Vec<u8>,
     pub weekly_levels: Vec<u8>,
     pub poll_interval_secs: u64,
@@ -41,6 +42,7 @@ impl Default for Settings {
             show_time_ticks: true,
             show_elapsed_marker: true,
             show_threshold_marks: true,
+            show_history: true,
             session_levels: vec![80, 95],
             weekly_levels: vec![95],
             poll_interval_secs: 180,
@@ -48,7 +50,7 @@ impl Default for Settings {
     }
 }
 
-pub const KEYS: [&str; 12] = [
+pub const KEYS: [&str; 13] = [
     "session",
     "weekly",
     "glyph",
@@ -61,6 +63,7 @@ pub const KEYS: [&str; 12] = [
     "show_time_ticks",
     "show_elapsed_marker",
     "show_threshold_marks",
+    "show_history",
 ];
 pub const MIN_POLL_SECS: u64 = 120;
 pub const MAX_POLL_SECS: u64 = 900;
@@ -83,6 +86,7 @@ impl Settings {
             "show_time_ticks" => self.show_time_ticks,
             "show_elapsed_marker" => self.show_elapsed_marker,
             "show_threshold_marks" => self.show_threshold_marks,
+            "show_history" => self.show_history,
             _ => false,
         }
     }
@@ -98,7 +102,9 @@ impl Settings {
             "remaining" => self.percent,
             "glyph" => true,
             "alert_session" | "alert_weekly" | "alert_reset" | "auto_update_check" => true,
-            "show_time_ticks" | "show_elapsed_marker" | "show_threshold_marks" => true,
+            "show_time_ticks" | "show_elapsed_marker" | "show_threshold_marks" | "show_history" => {
+                true
+            }
             _ => return false,
         };
         if self.get(key) && !partner_on {
@@ -117,6 +123,7 @@ impl Settings {
             "show_time_ticks" => self.show_time_ticks = !self.show_time_ticks,
             "show_elapsed_marker" => self.show_elapsed_marker = !self.show_elapsed_marker,
             "show_threshold_marks" => self.show_threshold_marks = !self.show_threshold_marks,
+            "show_history" => self.show_history = !self.show_history,
             _ => return false,
         }
         true
@@ -201,6 +208,7 @@ pub struct PopoverSettings {
     pub show_time_ticks: bool,
     pub show_elapsed_marker: bool,
     pub show_threshold_marks: bool,
+    pub show_history: bool,
 }
 
 impl From<&Settings> for PopoverSettings {
@@ -211,6 +219,7 @@ impl From<&Settings> for PopoverSettings {
             show_time_ticks: s.show_time_ticks,
             show_elapsed_marker: s.show_elapsed_marker,
             show_threshold_marks: s.show_threshold_marks,
+            show_history: s.show_history,
         }
     }
 }
@@ -345,13 +354,18 @@ mod tests {
 
     #[test]
     fn alert_keys_toggle_freely() {
-        assert_eq!(KEYS.len(), 12);
+        assert_eq!(KEYS.len(), 13);
         let mut s = Settings::default();
         assert!(s.alert_session && s.alert_weekly && s.alert_reset);
         assert!(s.auto_update_check);
         assert!(s.toggle("auto_update_check"));
         assert!(!s.get("auto_update_check"));
         assert!(s.toggle("auto_update_check"));
+        assert!(s.show_history);
+        assert!(s.toggle("show_history"));
+        assert!(!s.get("show_history"));
+        assert!(s.toggle("show_history"));
+        assert!(PopoverSettings::from(&s).show_history);
         assert!(s.toggle("alert_reset"));
         assert!(!s.get("alert_reset"));
         assert!(s.toggle("alert_reset"));
@@ -376,7 +390,7 @@ mod tests {
     #[test]
     fn new_fields_default() {
         let s = Settings::default();
-        assert_eq!(KEYS.len(), 12);
+        assert_eq!(KEYS.len(), 13);
         assert!(s.show_time_ticks && s.show_elapsed_marker && s.show_threshold_marks);
         assert_eq!(s.session_levels, vec![80, 95]);
         assert_eq!(s.weekly_levels, vec![95]);
