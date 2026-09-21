@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.11.0
+
+### Minor Changes
+
+- 0896f92: Sparkline under each quota bar showing how usage grew over the current reset window (persisted in history.json, cleared at reset); Popover → "History line" toggles it.
+
 ## 0.10.0
 
 ### Minor Changes
