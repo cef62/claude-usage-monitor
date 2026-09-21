@@ -9,14 +9,15 @@ better presentation, and links to the Claude usage/settings pages online.
 
 Stack: Tauri 2 (Rust shell) + React 19 + TypeScript + Vite. No third-party UI libraries.
 
-**Status:** v1.7 (auto-update) implemented; released via the Changesets pipeline.
+**Status:** v1.10 (usage-history sparkline) implemented; released via the Changesets pipeline.
 Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 `docs/superpowers/specs/2026-09-17-ci-release-design.md`,
 `docs/superpowers/specs/2026-09-17-menu-bar-settings-design.md`,
 `docs/superpowers/specs/2026-09-17-threshold-alerts-design.md`,
 `docs/superpowers/specs/2026-09-17-config-and-log-design.md`,
 `docs/superpowers/specs/2026-09-18-windows-tray-design.md`,
-`docs/superpowers/specs/2026-09-19-auto-update-design.md`.
+`docs/superpowers/specs/2026-09-19-auto-update-design.md`,
+`docs/superpowers/specs/2026-09-21-history-sparkline-design.md`.
 
 ## Reference Material (read before writing code)
 
@@ -72,6 +73,7 @@ src-tauri/
   src/icon.rs              Windows tray icon renderer (pure RGBA)
   src/log.rs               capped local log (never the token)
   src/update.rs            update check / install glue (tauri-plugin-updater)
+  src/history.rs           per-window usage samples for the sparkline (history.json)
   icons/
 test/                      Vitest specs for src/lib
 ```
