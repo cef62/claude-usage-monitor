@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.8.2
+
+### Patch Changes
+
+- f083bf9: Update notifications show the first line of the release notes; Help → "Check for updates automatically" can turn the daily check off. Release pages now carry the CHANGELOG entry.
+
 ## 0.8.1
 
 ### Patch Changes
