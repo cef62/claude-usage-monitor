@@ -1,7 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
-// Astro 7's markdown module exposes `Content` as a named export (the default export is the
-// internal loader function), not `default.Content`.
+// Astro 7's markdown module exposes `Content` as a named export; the default export is the
+// same `Content` component directly, not an object with a `.Content` property.
 import { Content as ReadmeContent } from '../../../README.md';
 ---
 

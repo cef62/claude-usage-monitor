@@ -99,6 +99,11 @@ main img {
 }
 
 main table {
+  /* README/CHANGELOG tables hold unbreakable tokens (filenames, commit hashes) that can push
+     wider than the phone-width `main` column; scroll horizontally instead of clipping, the
+     same way `main pre` already does. */
+  display: block;
+  overflow-x: auto;
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
