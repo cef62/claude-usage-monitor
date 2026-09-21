@@ -1,5 +1,6 @@
 //! Library target so integration tests and the binary share the same modules.
 pub mod alerts;
+pub mod history;
 pub mod icon;
 pub mod log;
 pub mod poll;
