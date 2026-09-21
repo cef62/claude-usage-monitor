@@ -1,5 +1,12 @@
 # claude-usage-monitor
 
+## 0.8.1
+
+### Patch Changes
+
+- 89787a7: Updater: the daily check keeps its schedule across system sleep, clicking Install during a check says "Update in progress…". CI actions are pinned to commit SHAs.
+- 272fe1d: Release workflow creates the GitHub Release as a draft and publishes it after both platform builds upload, since GitHub now makes published releases immutable.
+
 ## 0.8.0
 
 ### Minor Changes
