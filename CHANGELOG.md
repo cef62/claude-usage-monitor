@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.8.0
+
+### Minor Changes
+
+- 0ce186e: In-app updates: a daily check of the GitHub Releases feed, one notification per new version, and Help → Install update… to download, install and relaunch. Help → Check for updates… checks on demand.
+
 ## 0.7.0
 
 ### Minor Changes
