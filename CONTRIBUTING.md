@@ -7,7 +7,7 @@ time if the idea does not fit.
 
 ## Prerequisites
 
-- Node 24+ and pnpm 12 (`corepack enable` picks the pinned version from `package.json`).
+- Node 26+ and pnpm 12 (`corepack enable` picks the pinned version from `package.json`).
 - Rust stable via `rustup` (`src-tauri/rust-toolchain.toml` pins the channel and adds `rustfmt`
   and `clippy`).
 - macOS 13+ with Xcode command line tools, or Windows 10/11 with the MSVC build tools and
