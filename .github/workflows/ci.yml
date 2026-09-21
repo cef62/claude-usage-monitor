@@ -38,6 +38,8 @@ jobs:
 
       - run: pnpm verify
 
+      - run: pnpm site:build
+
       - run: pnpm tauri build --bundles app --target aarch64-apple-darwin
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

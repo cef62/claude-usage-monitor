@@ -44,6 +44,16 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/src-tauri", "!**/docs", "!**/.claude", "!**/history"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/src-tauri",
+      "!**/docs",
+      "!**/.claude",
+      "!**/history",
+      "!**/site/dist",
+      "!**/site/.astro",
+      "!**/*.astro"
+    ]
   }
 }

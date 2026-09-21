@@ -1,0 +1,130 @@
+---
+import pkg from '../../../package.json';
+import macAbout from '../../../docs/screenshots/mac-about.png';
+import macHelp from '../../../docs/screenshots/mac-help-menu.png';
+import macMenu from '../../../docs/screenshots/mac-menu.png';
+import macPopover from '../../../docs/screenshots/mac-popover.png';
+import macTray from '../../../docs/screenshots/mac-tray.png';
+import winTray from '../../../docs/screenshots/win-tray.png';
+import Base from '../layouts/Base.astro';
+
+const version = pkg.version;
+const releases = 'https://github.com/cef62/claude-usage-monitor/releases';
+// Asset names follow tauri-action's bundle naming; GitHub replaces spaces with dots.
+const download = (file: string) => `${releases}/download/v${version}/${file}`;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+// Screenshots are 2x Retina captures; showing them at half their pixel width keeps every
+// window at its real on-screen size, so the menu and the popover read at the same scale.
+const shot = (img: ImageMetadata, scale = 0.5) => ({
+  src: img.src,
+  width: img.width,
+  height: img.height,
+  style: `width: ${Math.round(img.width * scale)}px`,
+});
+---
+
+<Base title="Claude Usage Monitor">
+  <section class="hero">
+    <div class="hero-copy">
+      <h1>Claude Usage Monitor</h1>
+      <p class="lede">
+        Your Claude plan usage, always in the menu bar: how much of the session and weekly
+        windows you have used, and when each one resets.
+      </p>
+      <div class="downloads">
+        <a class="button" href={download(`Claude.Usage.Monitor_${version}_aarch64.dmg`)}>
+          Download for macOS
+        </a>
+        <a class="button" href={download(`Claude.Usage.Monitor_${version}_x64-setup.exe`)}>
+          Download for Windows
+        </a>
+      </div>
+      <p class="downloads-note">
+        Version {version} · Apple Silicon / Windows x64 · <a href={releases}>all releases</a>
+      </p>
+    </div>
+    <img
+      class="hero-shot"
+      {...shot(macPopover, 0.58)}
+      alt="The popover: session, weekly and per-model quotas with bars, history lines and reset times"
+    />
+  </section>
+
+  <section class="feature">
+    <div class="feature-copy">
+      <h2>At a glance</h2>
+      <ul>
+        <li>Session and weekly percentage next to the clock, each with its reset countdown.</li>
+        <li><code>⚠</code> appears when a quota reaches its alert level.</li>
+        <li>On Windows the tray icon draws the two quotas as bars and shows the text on hover.</li>
+        <li>Click for the popover: one card per quota, an elapsed-time marker, alert threshold ticks and a history line.</li>
+      </ul>
+    </div>
+    <div class="feature-shots">
+      <img {...shot(macTray, 0.75)} alt="macOS menu bar item: session and weekly percentages" />
+      <img {...shot(winTray, 0.75)} alt="Windows tray icon with two usage bars and tooltip" />
+    </div>
+  </section>
+
+  <section class="feature">
+    <div class="feature-copy">
+      <h2>Set up from the menu</h2>
+      <ul>
+        <li>Choose what the menu bar shows: session, weekly, glyphs, percent, remaining time.</li>
+        <li>Alert levels per quota, a test notification, and a "back to 0 %" notice on reset.</li>
+        <li>Check every 3, 5, 10 or 15 minutes; start at login; open the local log.</li>
+        <li>Everything persists in a small <code>settings.json</code> you can edit by hand.</li>
+      </ul>
+    </div>
+    <div class="feature-shots">
+      <img {...shot(macMenu, 0.5)} alt="Right-click menu: usage page, menu bar, popover, alerts, check every, start at login, help" />
+      <img {...shot(macHelp, 0.5)} alt="Help submenu: open log, update options, about" />
+    </div>
+  </section>
+
+  <section class="feature">
+    <div class="feature-copy">
+      <h2>Keeps itself current</h2>
+      <ul>
+        <li>Checks the releases feed once a day; one notification per new version.</li>
+        <li>Help → Install update downloads, installs and relaunches. Packages are signature-checked.</li>
+        <li>Help → About shows the installed version with links to the repository, release notes and issue tracker.</li>
+      </ul>
+    </div>
+    <div class="feature-shots">
+      <img {...shot(macAbout, 0.5)} alt="About view: version, links to GitHub, release notes, issues and license" />
+    </div>
+  </section>
+
+  <section class="notes">
+    <div>
+      <h2>Before you install</h2>
+      <ul>
+        <li>
+          <a href="https://docs.claude.com/en/docs/claude-code">Claude Code</a> must be installed
+          and logged in (<code>claude auth login</code>). The app reuses that login and never asks
+          for credentials.
+        </li>
+        <li>
+          macOS warns that the developer cannot be verified: System Settings → Privacy &amp;
+          Security → Open Anyway, or run
+          <code>xattr -cr "/Applications/Claude Usage Monitor.app"</code> once.
+        </li>
+        <li>Windows shows SmartScreen: More info → Run anyway.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>How it works</h2>
+      <ul>
+        <li>Reads the Claude Code OAuth token already on your machine.</li>
+        <li>Calls <code>api.anthropic.com/api/oauth/usage</code>, which returns percentages only — no token counts anywhere.</li>
+        <li>The token is never stored, logged, or sent anywhere else.</li>
+        <li>Polls every 3 minutes, backs off on rate limits, stops on an expired login.</li>
+      </ul>
+      <p>
+        Read the <a href={`${base}/guide/`}>guide</a> or the{' '}
+        <a href={`${base}/changelog/`}>changelog</a>.
+      </p>
+    </div>
+  </section>
+</Base>

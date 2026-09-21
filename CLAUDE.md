@@ -56,6 +56,7 @@ Specs: `docs/superpowers/specs/2026-09-16-usage-monitor-v1-design.md`,
 CLAUDE.md, AGENTS.md
 docs/                      research notes, design specs
 history/                   history-driven-workflow records (see skill)
+site/                      Astro site → GitHub Pages; guide = README.md, changelog = CHANGELOG.md
 src/                       React frontend (Vite root)
   main.tsx, App.tsx, app.css
   lib/                     pure TS: formatting, countdown, quota normalization
@@ -145,6 +146,8 @@ pnpm test:run           # vitest run
 pnpm verify             # check + typecheck + test:run + cargo fmt --check + cargo clippy -D warnings + cargo test
 pnpm tauri build
 pnpm changeset          # add a changeset for a user-visible change (required in the PR)
+pnpm site:dev           # preview the website (site/)
+pnpm site:build         # build the website to site/dist
 ```
 
 ## Versioning and Releases
@@ -158,7 +161,10 @@ pnpm changeset          # add a changeset for a user-visible change (required in
   opens the Version Packages PR; on its merge runs `changeset git-tag`, pushes the tag and
   dispatches `build-release.yml`), `build-release.yml` (dispatched by `release.yml`, or any
   manual `v*` tag push: `tauri-action` builds `aarch64-apple-darwin` and publishes the GitHub
-  Release, then a second job adds the Windows x64 NSIS installer).
+  Release, then a second job adds the Windows x64 NSIS installer), `pages.yml` (deploys `site/`
+  to GitHub Pages on push to `main` when site/README/CHANGELOG/package.json change, so every
+  Version Packages merge redeploys the site with the new version and notes; one-time repo
+  setting: Pages source must be "GitHub Actions").
 - Never edit versions by hand; never create tags by hand.
 
 ## Code Conventions

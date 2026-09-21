@@ -1,0 +1,45 @@
+---
+import '../styles.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const {
+  title,
+  description = 'Menu bar / system tray app showing your Claude plan usage: session and weekly ' +
+    'percentages and reset countdowns.',
+} = Astro.props;
+// BASE_URL has no trailing slash in this Astro version; normalize so links to subpages don't
+// glue the base and the path together (e.g. "/claude-usage-monitorguide/").
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <nav>
+        <a href={`${base}/`}>Home</a>
+        <a href={`${base}/guide/`}>Guide</a>
+        <a href={`${base}/changelog/`}>Changelog</a>
+        <a href="https://github.com/cef62/claude-usage-monitor">GitHub</a>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <p>
+        <a href="https://github.com/cef62/claude-usage-monitor">Claude Usage Monitor</a> · MIT · not affiliated with Anthropic
+      </p>
+    </footer>
+  </body>
+</html>
