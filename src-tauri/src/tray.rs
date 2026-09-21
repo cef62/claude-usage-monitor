@@ -706,6 +706,8 @@ mod tests {
     fn snapshot(status: Status, quotas: Vec<Quota>) -> Snapshot {
         Snapshot {
             quotas,
+            plan: None,
+            extra: None,
             fetched_at: Some(NOW),
             next_poll_at: NOW + 180,
             status,

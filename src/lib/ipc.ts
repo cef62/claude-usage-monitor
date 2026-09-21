@@ -36,6 +36,8 @@ export const FIXTURE: Snapshot = {
       period_secs: WEEKLY_SECS,
     },
   ],
+  plan: 'Max 5x',
+  extra: { used: 1234, limit: 5000, currency: 'EUR', decimals: 2, utilization: 24.68 },
   fetched_at: nowSecs - 42,
   next_poll_at: nowSecs + 138,
   status: { kind: 'ok' },

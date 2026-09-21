@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barColor, clock, countdown, elapsedPct, markClass, relative } from '@/lib/format';
+import { barColor, clock, countdown, elapsedPct, markClass, money, relative } from '@/lib/format';
 import { SESSION_SECS, WEEKLY_SECS } from '@/lib/quota';
 
 // Wed 2026-09-16 14:32 local time.
@@ -72,5 +72,11 @@ describe('relative', () => {
     expect(relative(3)).toBe('just now');
     expect(relative(42)).toBe('42s ago');
     expect(relative(180)).toBe('3m ago');
+  });
+
+  it('money formats minor units with the currency', () => {
+    expect(money(1234, 'EUR', 2)).toBe('€12.34');
+    expect(money(0, 'USD', 2)).toBe('$0.00');
+    expect(money(500, 'JPY', 0)).toBe('¥500');
   });
 });

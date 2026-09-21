@@ -14,8 +14,19 @@ export type Status =
   | { kind: 'rate_limited'; until: number }
   | { kind: 'error'; message: string };
 
+// Overage credits in the API's minor units; `decimals` says how to print them.
+export type ExtraUsage = {
+  used: number;
+  limit: number | null;
+  currency: string;
+  decimals: number;
+  utilization: number | null;
+};
+
 export type Snapshot = {
   quotas: Quota[];
+  plan: string | null;
+  extra: ExtraUsage | null;
   fetched_at: number | null;
   next_poll_at: number;
   status: Status;

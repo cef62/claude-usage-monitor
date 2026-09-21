@@ -83,8 +83,11 @@ percentage used, a bar, the reset countdown and clock time. Overlays on the bar:
   past the marker you are spending faster than the clock and the bar turns red.
 - **Threshold marks** — small coloured ticks under the bar at each alert level.
 
-The footer shows when the numbers were fetched and when the next check is due, plus links to
-the claude.ai usage and billing pages.
+A line above the cards names your plan (`Claude · Max 5x`), read once per login from the
+profile endpoint. If your account has extra usage (pay-as-you-go overage) switched on, an
+**Extra usage** card shows the credits used this month, with a bar and percentage when a monthly
+limit is set. The footer shows when the numbers were fetched and when the next check is due,
+plus links to the claude.ai usage and billing pages.
 
 ### Alerts
 
@@ -131,8 +134,9 @@ Settings file (hand-editing is fine; `session_levels` / `weekly_levels` accept a
 
 The app reads the Claude Code OAuth token — macOS Keychain service `Claude Code-credentials`,
 or `~/.claude/.credentials.json` (`$CLAUDE_CONFIG_DIR` if set) on Windows — and calls
-`https://api.anthropic.com/api/oauth/usage` with the same headers Claude Code uses. The API
-returns percentages only; there are no token counts anywhere. The token is never stored,
+`https://api.anthropic.com/api/oauth/usage` with the same headers Claude Code uses (plus one
+call to `/api/oauth/profile` per login for the plan name). The API returns percentages only;
+there are no token counts anywhere. The token is never stored,
 logged, or sent anywhere but `api.anthropic.com`. Polling is gentle by design: one request
 every 3 minutes by default, never two closer than 2 minutes, exponential backoff on `429`, and a
 full stop on `401` until you log in again.

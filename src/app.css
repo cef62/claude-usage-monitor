@@ -228,3 +228,11 @@ footer button.version {
   color: var(--muted);
   font-size: 11px;
 }
+
+.plan {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
