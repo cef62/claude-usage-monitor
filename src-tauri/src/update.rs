@@ -12,6 +12,8 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 /// Let the first usage poll finish before touching GitHub.
 pub const FIRST_CHECK_DELAY: Duration = Duration::from_secs(30);
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 3600);
+/// How often the checker thread re-reads the clock while waiting for the next check.
+const WAKE_POLL: Duration = Duration::from_secs(600);
 const _: () = assert!(FIRST_CHECK_DELAY.as_secs() < CHECK_INTERVAL.as_secs());
 
 /// Idle time between bytes before a check or download is abandoned. Without it a half-open
@@ -89,7 +91,12 @@ pub fn spawn_checker(app: AppHandle) {
         std::thread::sleep(FIRST_CHECK_DELAY);
         loop {
             check(&app, Trigger::Auto);
-            std::thread::sleep(CHECK_INTERVAL);
+            // Short naps instead of one long sleep: a laptop asleep for a day would otherwise
+            // push the next check a day further out.
+            let due = std::time::Instant::now() + CHECK_INTERVAL;
+            while std::time::Instant::now() < due {
+                std::thread::sleep(WAKE_POLL);
+            }
         }
     });
 }
@@ -165,6 +172,8 @@ pub fn install(app: &AppHandle) {
     let update = {
         let mut st = state(app);
         if st.busy {
+            drop(st);
+            notify(app, "Update in progress…", "");
             return;
         }
         let Some(update) = st.available.clone() else {
@@ -181,7 +190,7 @@ pub fn install(app: &AppHandle) {
         |chunk, total| {
             received += chunk as u64;
             if let Some(total) = total.filter(|t| *t > 0) {
-                let quarter = received * 4 / total;
+                let quarter = (received * 4 / total).min(4);
                 if quarter > last_quarter {
                     last_quarter = quarter;
                     log::write(app, &format!("update download {}%", quarter * 25));
