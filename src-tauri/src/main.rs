@@ -49,6 +49,26 @@ fn quit(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+struct About {
+    version: String,
+    os: &'static str,
+}
+
+#[tauri::command]
+fn get_about(app: AppHandle) -> Result<About, String> {
+    Ok(About {
+        version: app.package_info().version.to_string(),
+        os: if cfg!(target_os = "macos") {
+            "macOS"
+        } else if cfg!(target_os = "windows") {
+            "Windows"
+        } else {
+            "Linux"
+        },
+    })
+}
+
 #[tauri::command]
 fn get_settings(
     state: State<'_, Arc<Mutex<settings::Settings>>>,
@@ -133,7 +153,8 @@ fn main() {
             hide_popover,
             resize_popover,
             quit,
-            get_settings
+            get_settings,
+            get_about
         ])
         .on_window_event(|window, event| {
             // Only the popover auto-hides on blur; any future window keeps its focus behaviour.

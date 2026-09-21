@@ -49,6 +49,8 @@ The app has no main window. It lives in the menu bar / tray:
 
 - **Left click** the item to open the popover; click anywhere else (or the item again) to close it.
 - **Right click** for the menu: open the claude.ai usage page, settings, alerts, log, quit.
+- **Help → About…** (or the version in the popover footer) shows the installed version with
+  links to this repository, the release notes, the issue tracker and the license.
 
 ### Menu bar (macOS)
 

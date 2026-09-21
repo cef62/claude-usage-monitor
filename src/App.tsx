@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { About } from '@/About';
+import type { About as AboutInfo } from '@/lib/about';
+import { DEFAULT_ABOUT } from '@/lib/about';
 import { barColor, clock, countdown, elapsedPct, markClass, relative } from '@/lib/format';
 import {
+  getAbout,
   getSettings,
   getSnapshot,
   hidePopover,
   onSettings,
+  onShowAbout,
   onUsage,
   openUrl,
   quit,
@@ -83,6 +88,8 @@ function QuotaCard({ q, now, settings }: { q: Quota; now: number; settings: Popo
 export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [settings, setSettings] = useState<PopoverSettings>(DEFAULT_POPOVER_SETTINGS);
+  const [about, setAbout] = useState<AboutInfo>(DEFAULT_ABOUT);
+  const [view, setView] = useState<'usage' | 'about'>('usage');
   const now = useNow();
   const root = useRef<HTMLDivElement>(null);
 
@@ -119,11 +126,33 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    let off = () => {};
+    getAbout().then((a) => {
+      if (!cancelled) setAbout(a);
+    });
+    onShowAbout(() => setView('about')).then((unlisten) => {
+      if (cancelled) unlisten();
+      else off = unlisten;
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') hidePopover();
     };
+    // Losing focus hides the popover; the next open should show usage, not a stale About.
+    const onBlur = () => setView('usage');
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('blur', onBlur);
+    };
   }, []);
 
   useEffect(() => {
@@ -138,6 +167,14 @@ export default function App() {
     return (
       <div ref={root} className="root">
         <p className="empty">Loading…</p>
+      </div>
+    );
+  }
+
+  if (view === 'about') {
+    return (
+      <div ref={root} className="root">
+        <About info={about} onBack={() => setView('usage')} />
       </div>
     );
   }
@@ -169,6 +206,10 @@ export default function App() {
           : `Updated ${relative(now - snap.fetched_at)}`}
         {' · next '}
         {countdown(snap.next_poll_at - now)}
+        {' · '}
+        <button type="button" className="version" onClick={() => setView('about')}>
+          v{about.version}
+        </button>
       </footer>
     </div>
   );

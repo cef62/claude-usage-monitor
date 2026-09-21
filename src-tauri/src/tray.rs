@@ -69,6 +69,7 @@ pub enum MenuAction {
     Autostart,
     CheckUpdates,
     InstallUpdate,
+    About,
 }
 
 pub fn radio_id_levels(key: &str, levels: &[u8]) -> String {
@@ -93,6 +94,7 @@ pub fn parse_menu_id(id: &str) -> Option<MenuAction> {
         "autostart" => return Some(MenuAction::Autostart),
         "check-updates" => return Some(MenuAction::CheckUpdates),
         "install-update" => return Some(MenuAction::InstallUpdate),
+        "about" => return Some(MenuAction::About),
         _ => {}
     }
     if let Some(key) = id.strip_prefix("set:") {
@@ -377,12 +379,15 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     items.insert("auto_update_check".to_string(), auto_check.clone());
+    let about = MenuItemBuilder::with_id("about", "About…").build(app)?;
     let help = SubmenuBuilder::new(app, "Help")
         .item(&open_log_item)
         .separator()
         .item(&auto_check)
         .item(&check_updates)
         .item(&install_update)
+        .separator()
+        .item(&about)
         .build()?;
     app.manage(MenuItems(items));
 
@@ -423,6 +428,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
                 let app = app.clone();
                 std::thread::spawn(move || update::install(&app));
             }
+            Some(MenuAction::About) => show_about(app),
             None => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -565,6 +571,22 @@ fn open_log(app: &AppHandle) {
         let _ = log::append(&path, "log created from Help → Open log");
     }
     let _ = tauri_plugin_opener::reveal_item_in_dir(&path);
+}
+
+/// Opens the popover (where it was last placed) and switches it to the About view.
+fn show_about(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("popover") else {
+        return;
+    };
+    let last = app
+        .try_state::<LastTrayRect>()
+        .and_then(|l| *l.0.lock().unwrap_or_else(|p| p.into_inner()));
+    if let Some(rect) = last {
+        place(app, &window, &rect);
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
+    let _ = app.emit("show-about", ());
 }
 
 fn toggle_popover(app: &AppHandle, rect: &Rect) {
@@ -856,6 +878,7 @@ mod tests {
             parse_menu_id("install-update"),
             Some(MenuAction::InstallUpdate)
         ));
+        assert!(matches!(parse_menu_id("about"), Some(MenuAction::About)));
         assert!(matches!(parse_menu_id("set:glyph"), Some(MenuAction::Toggle(k)) if k == "glyph"));
         assert!(matches!(
             parse_menu_id("levels:weekly:80,95"),

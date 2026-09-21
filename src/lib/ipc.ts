@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import type { About } from './about';
+import { DEFAULT_ABOUT } from './about';
 import type { PopoverSettings, Snapshot } from './quota';
 import { DEFAULT_POPOVER_SETTINGS, SESSION_SECS, WEEKLY_SECS } from './quota';
 
@@ -55,6 +57,15 @@ export async function getSettings(): Promise<PopoverSettings> {
 export async function onSettings(cb: (s: PopoverSettings) => void): Promise<() => void> {
   if (!inTauri) return () => {};
   return listen<PopoverSettings>('settings', (event) => cb(event.payload));
+}
+
+export async function getAbout(): Promise<About> {
+  return inTauri ? invoke<About>('get_about') : DEFAULT_ABOUT;
+}
+
+export async function onShowAbout(cb: () => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen('show-about', () => cb());
 }
 
 export async function hidePopover(): Promise<void> {
