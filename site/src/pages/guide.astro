@@ -2,9 +2,47 @@
 import Base from '../layouts/Base.astro';
 // Astro 7's markdown module exposes `Content` as a named export; the default export is the
 // same `Content` component directly, not an object with a `.Content` property.
-import { Content as ReadmeContent } from '../../../README.md';
+import { Content as ReadmeContent, getHeadings } from '../../../README.md';
+
+// remark-drop-preamble removes the README title and intro, so the table of contents starts
+// at the first section too.
+const headings = getHeadings().filter((h) => h.depth === 2 || h.depth === 3);
 ---
 
-<Base title="Guide · Claude Usage Monitor">
-  <ReadmeContent />
+<Base title="Guide · Claude Usage Monitor" description="Install, use and configure Claude Usage Monitor: menu bar text, popover, alerts, updates and settings.">
+  <div class="guide">
+    <nav class="toc" aria-label="On this page">
+      <p class="toc-title">On this page</p>
+      <ul>
+        {headings.map((h) => (
+          <li class={`depth-${h.depth}`}><a href={`#${h.slug}`}>{h.text}</a></li>
+        ))}
+      </ul>
+    </nav>
+    <article class="prose">
+      <h1>Guide</h1>
+      <ReadmeContent />
+    </article>
+  </div>
 </Base>
+
+<script>
+  // Highlight the section currently on screen. Purely cosmetic: the links work without it.
+  const links = new Map(
+    [...document.querySelectorAll<HTMLAnchorElement>('.toc a')].map((a) => [a.hash.slice(1), a]),
+  );
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        for (const a of links.values()) a.removeAttribute('aria-current');
+        links.get(entry.target.id)?.setAttribute('aria-current', 'location');
+      }
+    },
+    { rootMargin: '-10% 0px -80% 0px' },
+  );
+  for (const id of links.keys()) {
+    const el = document.getElementById(id);
+    if (el) observer.observe(el);
+  }
+</script>

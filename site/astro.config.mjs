@@ -2,13 +2,14 @@ import { unified } from '@astrojs/markdown-remark';
 import { defineConfig } from 'astro/config';
 import rehypeRepoLinks from './plugins/rehype-repo-links.mjs';
 import remarkCommitLinks from './plugins/remark-commit-links.mjs';
+import remarkDropPreamble from './plugins/remark-drop-preamble.mjs';
 
 export default defineConfig({
   site: 'https://cef62.github.io',
   base: '/claude-usage-monitor',
   markdown: {
     processor: unified({
-      remarkPlugins: [remarkCommitLinks],
+      remarkPlugins: [remarkDropPreamble, remarkCommitLinks],
       rehypePlugins: [rehypeRepoLinks],
     }),
   },

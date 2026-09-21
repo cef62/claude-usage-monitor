@@ -20,7 +20,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version && node scripts/sync-version.mjs",
     "release:tag": "changeset git-tag",
-    "site:dev": "astro dev --root site",
+    "site:dev": "cd site && astro dev",
     "site:build": "astro build --root site",
     "site:preview": "astro preview --root site"
   },

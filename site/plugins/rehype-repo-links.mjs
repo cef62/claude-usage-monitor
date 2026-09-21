@@ -1,17 +1,13 @@
-// README image/link paths are relative to the repo root; GitHub resolves those, but the static
-// site has no copy of the files, so point them at GitHub's raw/blob URLs instead.
+// README links are relative to the repo root (CONTRIBUTING.md, LICENSE); the site has no copy
+// of those files, so point them at GitHub. Images are left alone: Astro resolves relative
+// markdown images itself and bundles them with the site.
 const SKIP = /^(https?:\/\/|\/|#|mailto:)/;
 const REPO = 'https://github.com/cef62/claude-usage-monitor';
 
 function walk(node) {
-  if (node.type === 'element') {
-    // hast elements always carry `properties`; a `?? {}` fallback would be a detached
-    // object whose mutations are silently lost.
+  if (node.type === 'element' && node.tagName === 'a') {
     const props = node.properties;
-    if (node.tagName === 'img' && typeof props.src === 'string' && !SKIP.test(props.src)) {
-      props.src = `${REPO.replace('github.com', 'raw.githubusercontent.com')}/main/${props.src}`;
-    }
-    if (node.tagName === 'a' && typeof props.href === 'string' && !SKIP.test(props.href)) {
+    if (typeof props.href === 'string' && !SKIP.test(props.href)) {
       props.href = `${REPO}/blob/main/${props.href}`;
     }
   }

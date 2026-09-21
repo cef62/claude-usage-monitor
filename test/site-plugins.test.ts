@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import rehypeRepoLinks from '../site/plugins/rehype-repo-links.mjs';
 import remarkCommitLinks from '../site/plugins/remark-commit-links.mjs';
+import remarkDropPreamble from '../site/plugins/remark-drop-preamble.mjs';
 
 // Minimal mdast-shaped nodes — just enough structure for remark-commit-links to walk.
 interface TextNode {
@@ -137,7 +138,7 @@ interface HastRoot {
 }
 
 describe('rehypeRepoLinks', () => {
-  it('rewrites a relative img src to a raw.githubusercontent.com URL', () => {
+  it('leaves img src alone so Astro bundles README images itself', () => {
     const img: HastElement = {
       type: 'element',
       tagName: 'img',
@@ -148,9 +149,7 @@ describe('rehypeRepoLinks', () => {
 
     rehypeRepoLinks()(tree);
 
-    expect(img.properties.src).toBe(
-      'https://raw.githubusercontent.com/cef62/claude-usage-monitor/main/docs/screenshots/mac-tray.png',
-    );
+    expect(img.properties.src).toBe('docs/screenshots/mac-tray.png');
   });
 
   it('rewrites a relative a href to a github.com blob URL', () => {
@@ -211,5 +210,28 @@ describe('rehypeRepoLinks', () => {
     expect(a.properties.href).toBe(
       'https://github.com/cef62/claude-usage-monitor/blob/main/LICENSE',
     );
+  });
+});
+
+describe('remarkDropPreamble', () => {
+  const heading = (depth: number) => ({ type: 'heading', depth, children: [] });
+  const para = () => ({ type: 'paragraph', children: [] });
+
+  it('drops everything before the first level-2 heading', () => {
+    const install = heading(2);
+    const tree = { type: 'root', children: [heading(1), para(), para(), install, para()] };
+
+    remarkDropPreamble()(tree);
+
+    expect(tree.children[0]).toBe(install);
+    expect(tree.children).toHaveLength(2);
+  });
+
+  it('leaves a tree that already starts with a level-2 heading untouched', () => {
+    const tree = { type: 'root', children: [heading(2), para()] };
+
+    remarkDropPreamble()(tree);
+
+    expect(tree.children).toHaveLength(2);
   });
 });

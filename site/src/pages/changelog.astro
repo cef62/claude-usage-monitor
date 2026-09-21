@@ -2,9 +2,12 @@
 import Base from '../layouts/Base.astro';
 // Astro 7's markdown module exposes `Content` as a named export; the default export is the
 // same `Content` component directly, not an object with a `.Content` property.
-import { Content as LogContent } from '../../../CHANGELOG.md';
+import { Content as ChangelogContent } from '../../../CHANGELOG.md';
 ---
 
-<Base title="Changelog · Claude Usage Monitor">
-  <LogContent />
+<Base title="Changelog · Claude Usage Monitor" description="Release notes for every version of Claude Usage Monitor.">
+  <article class="prose changelog">
+    <h1>Changelog</h1>
+    <ChangelogContent />
+  </article>
 </Base>
