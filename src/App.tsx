@@ -100,7 +100,6 @@ function QuotaCard({
       </div>
       {settings.show_history && history.length >= 2 && (
         <svg className="spark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
-          <title>Usage over this window</title>
           <line className="pace" x1="0" y1="28" x2="100" y2="0" />
           <polyline
             points={sparkPoints(history, q.resets_at - q.period_secs, q.period_secs, 100, 28)}

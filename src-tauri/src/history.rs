@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
-pub const MAX_SAMPLES: usize = 4000;
+// 7 d at the 120 s poll floor = 5040 samples; keep the whole weekly window.
+pub const MAX_SAMPLES: usize = 5100;
 pub const MIN_GAP_SECS: i64 = 60;
 pub const POPOVER_POINTS: usize = 200;
 const FILE_NAME: &str = "history.json";

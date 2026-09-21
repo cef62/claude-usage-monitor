@@ -14,7 +14,7 @@ pace" line so the user sees at a glance whether they are ahead of the clock.
 | Topic | Decision |
 |---|---|
 | Scope | `session` and `weekly` quotas only; current window only; no export |
-| Samples | `(t, pct)` per successful poll, at most one per 60 s per key, capped at 4000 per key |
+| Samples | `(t, pct)` per successful poll, at most one per 60 s per key, capped at 5100 per key (a full week at the 120 s poll floor) |
 | Pruning | on every record, samples with `t < resets_at − period_secs` are dropped — the reset empties the line by itself, no reset detection needed |
 | Persistence | `history.json` in `app_data_dir`, written only when a record changed something; corrupt/missing → empty |
 | Transport | `Snapshot.history: HashMap<String, Vec<Sample>>`, downsampled to ≤ 200 points per key (even stride, last sample always kept) |
@@ -31,7 +31,7 @@ Multi-window history, CSV export, per-model quotas, tray/icon changes, tooltips 
 ### `history.rs` (new)
 
 ```rust
-pub const MAX_SAMPLES: usize = 4000;
+pub const MAX_SAMPLES: usize = 5100;
 pub const MIN_GAP_SECS: i64 = 60;
 pub const POPOVER_POINTS: usize = 200;
 const FILE_NAME: &str = "history.json";
@@ -98,7 +98,7 @@ README Popover overlay list gains **History line**; Configure table Popover row;
 Rust:
 - `record`: first call appends one sample per session/weekly quota and ignores `weekly:fable`;
   a second call 30 s later appends nothing (returns false); 60 s later appends; a sample older
-  than the window start is dropped when the next record runs; 4001 samples → 4000 (oldest gone).
+  than the window start is dropped when the next record runs; MAX_SAMPLES + 1 samples → MAX_SAMPLES (oldest gone).
 - `downsample`: 1000 → 200 with the last sample kept; 50 → 50 unchanged.
 - `load`/`save` round-trip in a temp dir; `load` of garbage → empty.
 - `settings`: `KEYS.len() == 13`, `show_history` default true and toggles.
