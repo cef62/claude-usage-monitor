@@ -23,6 +23,7 @@ pnpm tauri dev      # the full app: menu bar / tray item + popover, hot reload f
 pnpm dev            # popover UI alone in a browser, with fixture data (no Rust, no token)
 pnpm verify         # everything CI runs: biome, tsc, vitest, cargo fmt/clippy/test
 pnpm tauri build    # release bundle under src-tauri/target/release/bundle/
+pnpm site:dev       # preview the website (site/) that renders README.md and CHANGELOG.md
 ```
 
 `pnpm verify` must be green before you push. It is what the CI `verify-and-build` (macOS) and

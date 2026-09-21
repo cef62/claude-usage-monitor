@@ -13,6 +13,8 @@ already stored on your machine — nothing else to configure.
 
 Built with Tauri 2, Rust, React and TypeScript. No third-party UI libraries. MIT licensed.
 
+Website: https://cef62.github.io/claude-usage-monitor/ — downloads, guide and changelog.
+
 | macOS menu bar | Windows tray |
 |---|---|
 | ![macOS menu bar](docs/screenshots/mac-tray.png) | ![Windows tray](docs/screenshots/win-tray.png) |
