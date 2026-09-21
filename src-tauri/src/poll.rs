@@ -33,6 +33,10 @@ pub enum Status {
 pub struct Snapshot {
     /// Last good quotas. An error never empties this.
     pub quotas: Vec<Quota>,
+    /// Plan name from the profile endpoint, fetched once per token.
+    pub plan: Option<String>,
+    /// Overage credits from the usage response, when the account has extra usage enabled.
+    pub extra: Option<usage::ExtraUsage>,
     pub fetched_at: Option<i64>,
     pub next_poll_at: i64,
     pub status: Status,
@@ -42,6 +46,8 @@ impl Default for Snapshot {
     fn default() -> Self {
         Self {
             quotas: Vec::new(),
+            plan: None,
+            extra: None,
             fetched_at: None,
             next_poll_at: 0,
             status: Status::NoToken,
@@ -50,6 +56,11 @@ impl Default for Snapshot {
 }
 
 pub type Shared = Arc<Mutex<Snapshot>>;
+
+/// The profile is re-read only when the token changes (or was never read).
+pub fn needs_profile(profile_for: Option<u64>, fingerprint: u64) -> bool {
+    profile_for != Some(fingerprint)
+}
 
 fn lock(shared: &Shared) -> MutexGuard<'_, Snapshot> {
     shared
@@ -150,6 +161,7 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
         let mut error_count: u32 = 0;
         let mut last_success: Option<i64> = None;
         let mut latched_fingerprint: Option<u64> = None;
+        let mut profile_for: Option<u64> = None;
 
         loop {
             let now = now();
@@ -190,8 +202,38 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
                                 error_count = 0;
                                 latched_fingerprint = None;
                                 last_success = Some(now);
+                                let extra = usage::extra_usage(&body);
+                                // One profile call per token: it only carries the plan name.
+                                let plan = if needs_profile(profile_for, creds.fingerprint) {
+                                    match usage::fetch_profile(
+                                        &client,
+                                        USAGE_BASE_URL,
+                                        &creds.token,
+                                        &user_agent,
+                                    ) {
+                                        Ok(profile) => {
+                                            profile_for = Some(creds.fingerprint);
+                                            usage::plan_label(&profile)
+                                        }
+                                        Err(e) => {
+                                            if let Some(path) = &log_path {
+                                                let _ = log::append(
+                                                    path,
+                                                    &format!("profile failed {e:?}"),
+                                                );
+                                            }
+                                            None
+                                        }
+                                    }
+                                } else {
+                                    None
+                                };
                                 let mut s = lock(&shared);
                                 s.quotas = quotas;
+                                s.extra = extra;
+                                if plan.is_some() {
+                                    s.plan = plan;
+                                }
                                 s.fetched_at = Some(now);
                                 s.status = Status::Ok;
                                 Outcome::Success
@@ -352,6 +394,8 @@ mod tests {
     #[test]
     fn log_line_summarizes_the_cycle() {
         let snap = Snapshot {
+            plan: None,
+            extra: None,
             quotas: vec![
                 Quota {
                     key: "session".into(),
@@ -420,5 +464,12 @@ mod tests {
         assert_eq!(s.status, Status::NoToken);
         assert!(s.quotas.is_empty());
         assert_eq!(s.fetched_at, None);
+    }
+
+    #[test]
+    fn profile_is_fetched_once_per_token() {
+        assert!(needs_profile(None, 7));
+        assert!(needs_profile(Some(1), 7));
+        assert!(!needs_profile(Some(7), 7));
     }
 }

@@ -127,8 +127,28 @@ pub fn fetch_usage(
     token: &str,
     user_agent: &str,
 ) -> Result<Value, FetchError> {
+    fetch_json(client, base_url, "/api/oauth/usage", token, user_agent)
+}
+
+/// Account/organization metadata; only the plan tier is used. Fetched once per token.
+pub fn fetch_profile(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    token: &str,
+    user_agent: &str,
+) -> Result<Value, FetchError> {
+    fetch_json(client, base_url, "/api/oauth/profile", token, user_agent)
+}
+
+fn fetch_json(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    path: &str,
+    token: &str,
+    user_agent: &str,
+) -> Result<Value, FetchError> {
     let resp = client
-        .get(format!("{base_url}/api/oauth/usage"))
+        .get(format!("{base_url}{path}"))
         .header("Authorization", format!("Bearer {token}"))
         .header("anthropic-beta", "oauth-2025-04-20")
         .header("Content-Type", "application/json")
@@ -287,9 +307,71 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146097 + doe - 719468
 }
 
+/// Short plan name from the profile: known `rate_limit_tier`s first, else the organization
+/// type title-cased (`claude_max` → `Claude Max`).
+pub fn plan_label(profile: &Value) -> Option<String> {
+    let org = profile.get("organization")?;
+    let tier = org.get("rate_limit_tier").and_then(Value::as_str);
+    let known = match tier {
+        Some("default_claude_max_5x") => Some("Max 5x"),
+        Some("default_claude_max_20x") => Some("Max 20x"),
+        Some("default_claude_pro") => Some("Pro"),
+        _ => None,
+    };
+    if let Some(k) = known {
+        return Some(k.to_string());
+    }
+    let org_type = org.get("organization_type").and_then(Value::as_str)?;
+    let words: Vec<String> = org_type
+        .split('_')
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + c.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect();
+    Some(words.join(" "))
+}
+
+/// Pay-as-you-go overage, present only when the account has it switched on. Amounts are the
+/// API's minor units; the popover formats them with `decimals`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ExtraUsage {
+    pub used: f64,
+    pub limit: Option<f64>,
+    pub currency: String,
+    pub decimals: u8,
+    pub utilization: Option<f64>,
+}
+
+pub fn extra_usage(v: &Value) -> Option<ExtraUsage> {
+    let e = v.get("extra_usage")?;
+    if e.get("is_enabled").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    Some(ExtraUsage {
+        used: e.get("used_credits").and_then(Value::as_f64).unwrap_or(0.0),
+        limit: e.get("monthly_limit").and_then(Value::as_f64),
+        currency: e
+            .get("currency")
+            .and_then(Value::as_str)
+            .unwrap_or("USD")
+            .to_string(),
+        decimals: e
+            .get("decimal_places")
+            .and_then(Value::as_u64)
+            .map_or(2, |d| d.min(6) as u8),
+        utilization: e.get("utilization").and_then(Value::as_f64),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     const FIXTURE: &str = r#"{
       "five_hour": {"utilization": 48.0, "resets_at": "2026-09-05T12:59:59.966454+00:00"},
@@ -409,5 +491,48 @@ mod tests {
             version.chars().next().is_some_and(|c| c.is_ascii_digit()),
             "{ua}"
         );
+    }
+
+    #[test]
+    fn plan_label_maps_known_tiers_and_falls_back() {
+        let tier = |t: &str| json!({"organization": {"rate_limit_tier": t, "organization_type": "claude_max"}});
+        assert_eq!(
+            plan_label(&tier("default_claude_max_5x")).as_deref(),
+            Some("Max 5x")
+        );
+        assert_eq!(
+            plan_label(&tier("default_claude_max_20x")).as_deref(),
+            Some("Max 20x")
+        );
+        assert_eq!(
+            plan_label(&tier("default_claude_pro")).as_deref(),
+            Some("Pro")
+        );
+        assert_eq!(
+            plan_label(&tier("default_claude_team")).as_deref(),
+            Some("Claude Max")
+        );
+        let no_tier = json!({"organization": {"organization_type": "claude_pro"}});
+        assert_eq!(plan_label(&no_tier).as_deref(), Some("Claude Pro"));
+        assert_eq!(plan_label(&json!({"account": {}})), None);
+    }
+
+    #[test]
+    fn extra_usage_only_when_enabled() {
+        let off = json!({"extra_usage": {"is_enabled": false, "used_credits": 5.0}});
+        assert!(extra_usage(&off).is_none());
+        let uncapped = json!({"extra_usage": {"is_enabled": true, "used_credits": 1234.0,
+            "monthly_limit": null, "utilization": null, "currency": "EUR", "decimal_places": 2}});
+        let e = extra_usage(&uncapped).expect("enabled");
+        assert_eq!(e.used, 1234.0);
+        assert_eq!(e.limit, None);
+        assert_eq!(e.currency, "EUR");
+        assert_eq!(e.decimals, 2);
+        let capped = json!({"extra_usage": {"is_enabled": true, "used_credits": 2500.0,
+            "monthly_limit": 5000.0, "utilization": 50.0, "currency": "USD", "decimal_places": 2}});
+        let e = extra_usage(&capped).expect("enabled");
+        assert_eq!(e.limit, Some(5000.0));
+        assert_eq!(e.utilization, Some(50.0));
+        assert!(extra_usage(&json!({})).is_none());
     }
 }

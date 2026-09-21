@@ -1,4 +1,4 @@
-import type { Quota } from './quota';
+import type { ExtraUsage, Quota } from './quota';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -46,4 +46,25 @@ export function relative(secs: number): string {
   if (secs < 5) return 'just now';
   if (secs < 60) return `${Math.floor(secs)}s ago`;
   return `${Math.floor(secs / 60)}m ago`;
+}
+
+export function money(minor: number, currency: string, decimals: number): string {
+  const amount = minor / 10 ** decimals;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(decimals)} ${currency}`;
+  }
+}
+
+// Extra usage has no clock to be ahead of: only the plain thresholds apply.
+export function extraPct(e: ExtraUsage): number | null {
+  if (e.utilization !== null) return e.utilization;
+  if (e.limit !== null && e.limit > 0) return (e.used / e.limit) * 100;
+  return null;
 }

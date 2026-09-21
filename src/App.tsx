@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { About } from '@/About';
 import type { About as AboutInfo } from '@/lib/about';
 import { DEFAULT_ABOUT } from '@/lib/about';
-import { barColor, clock, countdown, elapsedPct, markClass, relative } from '@/lib/format';
+import {
+  barColor,
+  clock,
+  countdown,
+  elapsedPct,
+  extraPct,
+  markClass,
+  money,
+  relative,
+} from '@/lib/format';
 import {
   getAbout,
   getSettings,
@@ -15,7 +24,7 @@ import {
   quit,
   resizePopover,
 } from '@/lib/ipc';
-import type { PopoverSettings, Quota, Snapshot, Status } from '@/lib/quota';
+import type { ExtraUsage, PopoverSettings, Quota, Snapshot, Status } from '@/lib/quota';
 import { DEFAULT_POPOVER_SETTINGS, SESSION_SECS } from '@/lib/quota';
 
 const USAGE_URL = 'https://claude.ai/settings/usage';
@@ -80,6 +89,28 @@ function QuotaCard({ q, now, settings }: { q: Quota; now: number; settings: Popo
       </div>
       <p className="reset">
         Resets in {countdown(q.resets_at - now)} · {clock(q.resets_at, now)}
+      </p>
+    </section>
+  );
+}
+
+function ExtraCard({ e }: { e: ExtraUsage }) {
+  const pct = extraPct(e);
+  const color = pct === null ? 'ok' : pct >= 100 ? 'over' : pct >= 80 ? 'warn' : 'ok';
+  return (
+    <section className={`card ${color}`}>
+      <header>
+        <span className="label">Extra usage</span>
+        <span className="pct">{pct === null ? '' : `${Math.round(pct)}%`}</span>
+      </header>
+      {pct !== null && (
+        <div className="bar">
+          <div className="fill" style={{ width: `${Math.min(100, pct)}%` }} />
+        </div>
+      )}
+      <p className="reset">
+        {money(e.used, e.currency, e.decimals)} used
+        {e.limit !== null && ` of ${money(e.limit, e.currency, e.decimals)} this month`}
       </p>
     </section>
   );
@@ -184,11 +215,13 @@ export default function App() {
 
   return (
     <div ref={root} className={stale ? 'root stale' : 'root'}>
+      {snap.plan && <p className="plan">Claude · {snap.plan}</p>}
       {banner && <div className={`banner ${snap.status.kind}`}>{banner}</div>}
       {snap.quotas.length === 0 && !banner && <p className="empty">No usage data yet</p>}
       {snap.quotas.map((q) => (
         <QuotaCard key={q.key} q={q} now={now} settings={settings} />
       ))}
+      {snap.extra && <ExtraCard e={snap.extra} />}
       <nav className="links">
         <button type="button" onClick={() => openUrl(USAGE_URL)}>
           Usage
