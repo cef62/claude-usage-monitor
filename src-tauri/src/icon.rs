@@ -131,6 +131,7 @@ mod tests {
             plan: None,
             extra: None,
             history: Default::default(),
+            forecast: Default::default(),
             fetched_at: Some(NOW),
             next_poll_at: NOW + 180,
             status,

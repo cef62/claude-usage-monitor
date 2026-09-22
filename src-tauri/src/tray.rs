@@ -710,6 +710,7 @@ mod tests {
             plan: None,
             extra: None,
             history: HashMap::new(),
+            forecast: HashMap::new(),
             fetched_at: Some(NOW),
             next_poll_at: NOW + 180,
             status,

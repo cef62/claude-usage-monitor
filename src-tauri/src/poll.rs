@@ -1,6 +1,7 @@
 //! Poll loop: owns the token for the duration of one request, applies the rate-limit
 //! discipline, and publishes a `Snapshot` for the tray and the popover.
 
+use crate::forecast::{self, Forecast};
 use crate::history;
 use crate::log;
 use crate::settings::{Settings, MAX_POLL_SECS, MIN_POLL_SECS};
@@ -41,6 +42,8 @@ pub struct Snapshot {
     pub extra: Option<usage::ExtraUsage>,
     /// Downsampled per-window samples for the popover sparkline.
     pub history: HashMap<String, Vec<history::Sample>>,
+    /// Pace forecast per session/weekly quota, computed from the full-resolution history.
+    pub forecast: HashMap<String, Forecast>,
     pub fetched_at: Option<i64>,
     pub next_poll_at: i64,
     pub status: Status,
@@ -53,6 +56,7 @@ impl Default for Snapshot {
             plan: None,
             extra: None,
             history: HashMap::new(),
+            forecast: HashMap::new(),
             fetched_at: None,
             next_poll_at: 0,
             status: Status::NoToken,
@@ -246,9 +250,11 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
                                     }
                                 }
                                 let popover_history = history.for_popover();
+                                let forecasts = forecast::for_quotas(&quotas, &history, now);
                                 let mut s = lock(&shared);
                                 s.quotas = quotas;
                                 s.history = popover_history;
+                                s.forecast = forecasts;
                                 s.extra = extra;
                                 if plan.is_some() {
                                     s.plan = plan;
@@ -416,6 +422,7 @@ mod tests {
             plan: None,
             extra: None,
             history: HashMap::new(),
+            forecast: HashMap::new(),
             quotas: vec![
                 Quota {
                     key: "session".into(),
@@ -484,6 +491,7 @@ mod tests {
         assert_eq!(s.status, Status::NoToken);
         assert!(s.quotas.is_empty());
         assert_eq!(s.fetched_at, None);
+        assert!(s.forecast.is_empty());
     }
 
     #[test]
