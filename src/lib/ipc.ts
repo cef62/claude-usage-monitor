@@ -41,6 +41,10 @@ export const FIXTURE: Snapshot = {
   fetched_at: nowSecs - 42,
   next_poll_at: nowSecs + 138,
   status: { kind: 'ok' },
+  forecast: {
+    session: { kind: 'runs_out', at: nowSecs + 80 * 60 },
+    weekly: { kind: 'at_reset', percent: 78 },
+  },
   history: {
     session: Array.from({ length: 30 }, (_, i) => ({
       t: nowSecs - 2 * 3600 + i * 240,

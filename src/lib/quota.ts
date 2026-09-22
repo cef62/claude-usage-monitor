@@ -25,6 +25,9 @@ export type ExtraUsage = {
 
 export type Sample = { t: number; pct: number };
 
+// Mirrors src-tauri/src/forecast.rs: where usage lands at the recent pace.
+export type Forecast = { kind: 'runs_out'; at: number } | { kind: 'at_reset'; percent: number };
+
 export type Snapshot = {
   quotas: Quota[];
   plan: string | null;
@@ -33,6 +36,7 @@ export type Snapshot = {
   next_poll_at: number;
   status: Status;
   history: Record<string, Sample[]>;
+  forecast: Record<string, Forecast>;
 };
 
 export const SESSION_SECS = 5 * 3600;

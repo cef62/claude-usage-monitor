@@ -8,6 +8,7 @@ import {
   countdown,
   elapsedPct,
   extraPct,
+  forecastText,
   markClass,
   money,
   relative,
@@ -25,7 +26,15 @@ import {
   quit,
   resizePopover,
 } from '@/lib/ipc';
-import type { ExtraUsage, PopoverSettings, Quota, Sample, Snapshot, Status } from '@/lib/quota';
+import type {
+  ExtraUsage,
+  Forecast,
+  PopoverSettings,
+  Quota,
+  Sample,
+  Snapshot,
+  Status,
+} from '@/lib/quota';
 import { DEFAULT_POPOVER_SETTINGS, SESSION_SECS } from '@/lib/quota';
 
 const USAGE_URL = 'https://claude.ai/settings/usage';
@@ -67,17 +76,20 @@ function QuotaCard({
   now,
   settings,
   history,
+  forecast,
 }: {
   q: Quota;
   now: number;
   settings: PopoverSettings;
   history: Sample[];
+  forecast: Forecast | undefined;
 }) {
   const elapsed = elapsedPct(q, now);
   const color = barColor(q.percent, elapsed);
   const tickCount = q.period_secs === SESSION_SECS ? 5 : 7;
   const ticks = Array.from({ length: tickCount - 1 }, (_, i) => ((i + 1) / tickCount) * 100);
   const levels = levelsFor(q, settings);
+  const pace = forecast ? forecastText(forecast, now) : null;
   return (
     <section className={`card ${color}`}>
       <header>
@@ -109,6 +121,7 @@ function QuotaCard({
       <p className="reset">
         Resets in {countdown(q.resets_at - now)} · {clock(q.resets_at, now)}
       </p>
+      {pace && <p className={forecast?.kind === 'runs_out' ? 'reset runs-out' : 'reset'}>{pace}</p>}
     </section>
   );
 }
@@ -244,6 +257,7 @@ export default function App() {
           now={now}
           settings={settings}
           history={snap.history[q.key] ?? []}
+          forecast={snap.forecast[q.key]}
         />
       ))}
       {snap.extra && <ExtraCard e={snap.extra} />}

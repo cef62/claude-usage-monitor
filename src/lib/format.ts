@@ -1,4 +1,4 @@
-import type { ExtraUsage, Quota, Sample } from './quota';
+import type { ExtraUsage, Forecast, Quota, Sample } from './quota';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -89,4 +89,10 @@ export function sparkPoints(
 
 function round(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+// Null for a run-out already in the past: the snapshot predates a sleep or a long backoff.
+export function forecastText(f: Forecast, now: number): string | null {
+  if (f.kind === 'at_reset') return `At this pace: ~${Math.round(f.percent)}% at reset`;
+  return f.at > now ? `At this pace: 100% at ${clock(f.at, now)}` : null;
 }
