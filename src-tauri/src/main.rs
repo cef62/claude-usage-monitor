@@ -79,8 +79,9 @@ fn get_settings(
     Ok(settings::PopoverSettings::from(&*s))
 }
 
-/// Shows one macOS notification per newly crossed threshold. Failures are ignored: the title
-/// marker still tells the story if notifications are denied.
+/// Shows one notification per newly crossed threshold, reset, or projected run-out; a run-out
+/// due together with a threshold alert for the same quota rides along in that alert's body.
+/// Failures are ignored: the title marker still tells the story if notifications are denied.
 fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
     let settings = app
         .state::<Arc<Mutex<settings::Settings>>>()
@@ -88,7 +89,7 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone();
     let now = poll::now();
-    let (resets, due) = {
+    let (resets, due, run_outs) = {
         let state = app.state::<Mutex<alerts::AlertState>>();
         let mut state = state
             .lock()
@@ -96,8 +97,22 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
         // Resets first: they belong to the window that just ended, thresholds to the new one.
         let resets = alerts::resets(&mut state, &snapshot.quotas, &settings);
         let due = alerts::evaluate(&mut state, &snapshot.quotas, &settings, now);
-        (resets, due)
+        let run_outs = alerts::run_outs(
+            &mut state,
+            &snapshot.quotas,
+            &snapshot.forecast,
+            &settings,
+            now,
+        );
+        (resets, due, run_outs)
     };
+    for r in &run_outs {
+        log::write(
+            app,
+            &format!("forecast {} 100% in {}", r.key, tray::countdown(r.at - now)),
+        );
+    }
+    let (merged, alone) = alerts::partition_run_outs(&due, run_outs);
     for reset in resets {
         let _ = app
             .notification()
@@ -111,6 +126,14 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
         log::write(app, &format!("reset {}", reset.key));
     }
     for alert in due {
+        let resets_in = tray::countdown(alert.resets_at - now);
+        let body = match merged.iter().find(|r| r.key == alert.key) {
+            Some(r) => format!(
+                "Resets in {resets_in} · at this pace 100% in ~{}",
+                tray::countdown(r.at - now)
+            ),
+            None => format!("Resets in {resets_in}"),
+        };
         let _ = app
             .notification()
             .builder()
@@ -119,10 +142,7 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
                 alert.label,
                 alert.percent.round() as i64
             ))
-            .body(format!(
-                "Resets in {}",
-                tray::countdown(alert.resets_at - now)
-            ))
+            .body(body)
             .show();
         log::write(
             app,
@@ -133,6 +153,18 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
                 alert.percent.round() as i64
             ),
         );
+    }
+    for r in alone {
+        let _ = app
+            .notification()
+            .builder()
+            .title(format!("Claude usage: {}", r.label))
+            .body(format!(
+                "At this pace: 100% in ~{} · resets in {}",
+                tray::countdown(r.at - now),
+                tray::countdown(r.resets_at - now)
+            ))
+            .show();
     }
 }
 

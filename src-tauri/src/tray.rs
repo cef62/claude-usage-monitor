@@ -45,10 +45,11 @@ const DISPLAY_MENU_LABEL: &str = "Menu bar";
 #[cfg(not(target_os = "macos"))]
 const DISPLAY_MENU_LABEL: &str = "Tray";
 
-const ALERT_LABELS: [(&str, &str); 3] = [
+const ALERT_LABELS: [(&str, &str); 4] = [
     ("alert_session", "Session"),
     ("alert_weekly", "Weekly"),
     ("alert_reset", "Notify on reset"),
+    ("alert_forecast", "Run-out forecast"),
 ];
 
 const POPOVER_LABELS: [(&str, &str); 4] = [
@@ -723,6 +724,18 @@ mod tests {
             quota("weekly", 64.0, 3 * 86400 + 4 * 3600 + 20 * 60, WEEKLY_SECS),
             quota("weekly:fable", 12.0, 3 * 86400, WEEKLY_SECS),
         ]
+    }
+
+    #[test]
+    fn alert_menu_items_are_known_settings() {
+        assert!(ALERT_LABELS
+            .iter()
+            .any(|(k, l)| *k == "alert_forecast" && *l == "Run-out forecast"));
+        assert!(ALERT_LABELS.iter().all(|(k, _)| KEYS.contains(k)));
+        assert_eq!(
+            parse_menu_id("set:alert_forecast"),
+            Some(MenuAction::Toggle("alert_forecast".into()))
+        );
     }
 
     #[test]

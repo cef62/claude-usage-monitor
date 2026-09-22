@@ -17,6 +17,7 @@ pub struct Settings {
     pub alert_session: bool,
     pub alert_weekly: bool,
     pub alert_reset: bool,
+    pub alert_forecast: bool,
     pub auto_update_check: bool,
     pub show_time_ticks: bool,
     pub show_elapsed_marker: bool,
@@ -38,6 +39,7 @@ impl Default for Settings {
             alert_session: true,
             alert_weekly: true,
             alert_reset: true,
+            alert_forecast: true,
             auto_update_check: true,
             show_time_ticks: true,
             show_elapsed_marker: true,
@@ -50,7 +52,7 @@ impl Default for Settings {
     }
 }
 
-pub const KEYS: [&str; 13] = [
+pub const KEYS: [&str; 14] = [
     "session",
     "weekly",
     "glyph",
@@ -59,6 +61,7 @@ pub const KEYS: [&str; 13] = [
     "alert_session",
     "alert_weekly",
     "alert_reset",
+    "alert_forecast",
     "auto_update_check",
     "show_time_ticks",
     "show_elapsed_marker",
@@ -82,6 +85,7 @@ impl Settings {
             "alert_session" => self.alert_session,
             "alert_weekly" => self.alert_weekly,
             "alert_reset" => self.alert_reset,
+            "alert_forecast" => self.alert_forecast,
             "auto_update_check" => self.auto_update_check,
             "show_time_ticks" => self.show_time_ticks,
             "show_elapsed_marker" => self.show_elapsed_marker,
@@ -93,7 +97,8 @@ impl Settings {
 
     /// Flips `key`. Returns false and changes nothing when the flip would disable the last
     /// enabled member of a pair (session/weekly, percent/remaining) or the key is unknown.
-    /// `glyph`, `alert_session`, `alert_weekly`, and `alert_reset` have no partner and can be freely toggled.
+    /// `glyph`, `alert_session`, `alert_weekly`, `alert_reset`, and `alert_forecast` have no
+    /// partner and can be freely toggled.
     pub fn toggle(&mut self, key: &str) -> bool {
         let partner_on = match key {
             "session" => self.weekly,
@@ -101,7 +106,8 @@ impl Settings {
             "percent" => self.remaining,
             "remaining" => self.percent,
             "glyph" => true,
-            "alert_session" | "alert_weekly" | "alert_reset" | "auto_update_check" => true,
+            "alert_session" | "alert_weekly" | "alert_reset" | "alert_forecast"
+            | "auto_update_check" => true,
             "show_time_ticks" | "show_elapsed_marker" | "show_threshold_marks" | "show_history" => {
                 true
             }
@@ -119,6 +125,7 @@ impl Settings {
             "alert_session" => self.alert_session = !self.alert_session,
             "alert_weekly" => self.alert_weekly = !self.alert_weekly,
             "alert_reset" => self.alert_reset = !self.alert_reset,
+            "alert_forecast" => self.alert_forecast = !self.alert_forecast,
             "auto_update_check" => self.auto_update_check = !self.auto_update_check,
             "show_time_ticks" => self.show_time_ticks = !self.show_time_ticks,
             "show_elapsed_marker" => self.show_elapsed_marker = !self.show_elapsed_marker,
@@ -362,8 +369,18 @@ mod tests {
     }
 
     #[test]
+    fn alert_forecast_defaults_on_and_toggles_freely() {
+        let mut s = Settings::default();
+        assert!(s.alert_forecast);
+        assert!(s.toggle("alert_forecast"));
+        assert!(!s.get("alert_forecast"));
+        assert!(s.toggle("alert_forecast"));
+        assert!(s.get("alert_forecast"));
+    }
+
+    #[test]
     fn alert_keys_toggle_freely() {
-        assert_eq!(KEYS.len(), 13);
+        assert_eq!(KEYS.len(), 14);
         let mut s = Settings::default();
         assert!(s.alert_session && s.alert_weekly && s.alert_reset);
         assert!(s.auto_update_check);
@@ -399,7 +416,7 @@ mod tests {
     #[test]
     fn new_fields_default() {
         let s = Settings::default();
-        assert_eq!(KEYS.len(), 13);
+        assert_eq!(KEYS.len(), 14);
         assert!(s.show_time_ticks && s.show_elapsed_marker && s.show_threshold_marks);
         assert_eq!(s.session_levels, vec![80, 95]);
         assert_eq!(s.weekly_levels, vec![95]);
@@ -481,6 +498,7 @@ mod tests {
         assert!(!s.alert_session);
         assert_eq!(s.poll_interval_secs, 180);
         assert_eq!(s.session_levels, vec![80, 95]);
+        assert!(s.alert_forecast);
     }
 
     #[test]
