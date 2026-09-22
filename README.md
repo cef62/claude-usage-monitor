@@ -99,6 +99,9 @@ used, a bar, the reset countdown and clock time. Overlays on the bar:
 
 Also in the popover:
 
+- **Pace forecast** — a line under the session and weekly cards: when you reach 100 % at the
+  pace of the last ~43 minutes (session) or 24 hours (weekly), in red, or where you land at the
+  reset if you will not run out first.
 - **Extra usage** card — if your account has pay-as-you-go overage switched on: credits used
   this month, with a bar and percentage when a monthly limit is set.
 - **Footer** — when the numbers were fetched, when the next check is due, and links to the
@@ -114,6 +117,10 @@ window. The first notification triggers the OS permission prompt — allow it.
   not nag you.
 - **Notify on reset** (on by default) — when a quota that reached its top level rolls into a
   new window, a notification tells you it is back to 0 %.
+- **Run-out forecast** (on by default) — one notification per window when the pace forecast
+  says a quota runs out at least ~43 minutes (session) or a day (weekly) before it resets,
+  while it is still below its highest level. If a threshold alert fires at the same moment, the
+  forecast is added to that notification instead.
 
 ### Updates
 
@@ -138,7 +145,7 @@ Everything is in the right-click menu and persists across restarts:
 |---|---|
 | **Menu bar** (macOS) / **Tray** (Windows) | Session · Weekly · Glyphs (`◷` / `▦`) · Percent · Remaining time. At least one quota and one of Percent/Remaining stay on. On Windows, Session/Weekly also hide the matching bar in the icon; the other three shape the tooltip. |
 | **Popover** | Time ticks · Elapsed marker · Threshold marks · History line |
-| **Alerts** | Session · Weekly (on/off) · Notify on reset · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
+| **Alerts** | Session · Weekly (on/off) · Notify on reset · Run-out forecast · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
 | **Check every** | 3 · 5 · 10 · 15 minutes (the API rate-limits below 2 minutes, so that is the floor) |
 | **Start at login** | registers the app as a login item (macOS: System Settings → General → Login Items, "Allow in the Background"; Windows: `HKCU\…\Run`). Off by default; the check mark always shows what the OS reports. Toggle it from the installed app, not from `pnpm tauri dev`. |
 | **Help → Check for updates automatically** | daily background check on/off (default on); **Check for updates…** always works |

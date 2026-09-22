@@ -1,6 +1,6 @@
 # Pace forecast — Design
 
-Date: 2026-09-22. Status: design approved in chat; spec under review.
+Date: 2026-09-22. Status: approved.
 
 ## Goal
 
@@ -126,9 +126,11 @@ Each run-out is logged as `forecast {key} 100% in {countdown}`.
 
 - `quota.ts`: `Forecast = { kind: 'runs_out'; at: number } | { kind: 'at_reset'; percent: number }`;
   `Snapshot.forecast: Record<string, Forecast>`.
-- `format.ts`: `forecastText(f: Forecast, now: number): string` —
+- `format.ts`: `forecastText(f: Forecast, now: number): string | null` —
   `runs_out` → `At this pace: 100% at ${clock(f.at, now)}` (weekday prefix when not today);
-  `at_reset` → `At this pace: ~${Math.round(f.percent)}% at reset`.
+  `at_reset` → `At this pace: ~${Math.round(f.percent)}% at reset`. Returns null for a
+  `runs_out` whose `at` is not in the future (a snapshot from before a sleep or a long
+  backoff); the card then shows no line.
 - `App.tsx` `QuotaCard`: new prop `forecast: Forecast | undefined` (from
   `snap.forecast[q.key]`); when present, a `<p>` after the reset line with class `reset`, plus
   `runs-out` for `runs_out`. CSS: `.reset.runs-out { color: var(--over); }`.
