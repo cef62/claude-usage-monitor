@@ -10,7 +10,13 @@ use std::collections::HashMap;
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Forecast {
     /// 100 % is reached by the reset, at this unix second (`at <= resets_at`).
-    RunsOut { at: i64 },
+    RunsOut {
+        at: i64,
+        /// No sample was a full lookback old, so the rate is the window average: fine for the
+        /// popover, too jumpy after an early burst to spend the window's only alert on.
+        #[serde(skip)]
+        from_average: bool,
+    },
     /// Projected utilization when the window resets; always < 100.
     AtReset { percent: f64 },
 }
@@ -28,11 +34,12 @@ pub fn forecast(q: &Quota, samples: &[Sample], now: i64) -> Option<Forecast> {
         return None;
     }
     // Windows start at 0 %, so without an old-enough sample this is the window average.
-    let (t0, p0) = samples
+    let base = samples
         .iter()
         .rev()
-        .find(|s| s.t >= window_start && s.t <= now - lookback)
-        .map_or((window_start, 0.0), |s| (s.t, f64::from(s.pct)));
+        .find(|s| s.t >= window_start && s.t <= now - lookback);
+    let from_average = base.is_none();
+    let (t0, p0) = base.map_or((window_start, 0.0), |s| (s.t, f64::from(s.pct)));
     let dt = (now - t0) as f64;
     if dt <= 0.0 {
         return None;
@@ -48,6 +55,7 @@ pub fn forecast(q: &Quota, samples: &[Sample], now: i64) -> Option<Forecast> {
     if secs_to_full <= secs_to_reset {
         Some(Forecast::RunsOut {
             at: now + secs_to_full.ceil() as i64,
+            from_average,
         })
     } else {
         Some(Forecast::AtReset {
@@ -93,7 +101,7 @@ mod tests {
 
     fn runs_out_at(f: Option<Forecast>) -> i64 {
         match f {
-            Some(Forecast::RunsOut { at }) => at,
+            Some(Forecast::RunsOut { at, .. }) => at,
             other => panic!("expected RunsOut, got {other:?}"),
         }
     }
@@ -174,6 +182,26 @@ mod tests {
     }
 
     #[test]
+    fn a_run_out_from_the_window_average_is_marked() {
+        let early = forecast(&session(50.0), &[at(NOW - 600, 45.0), at(NOW, 50.0)], NOW);
+        assert!(matches!(
+            early,
+            Some(Forecast::RunsOut {
+                from_average: true,
+                ..
+            })
+        ));
+        let trend = forecast(&session(50.0), &[at(NOW - 3000, 20.0), at(NOW, 50.0)], NOW);
+        assert!(matches!(
+            trend,
+            Some(Forecast::RunsOut {
+                from_average: false,
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn no_forecast_too_early_when_full_or_after_the_reset() {
         let young = Quota {
             resets_at: NOW + SESSION_SECS as i64 - 1000,
@@ -232,7 +260,11 @@ mod tests {
 
     #[test]
     fn serializes_with_a_kind_tag() {
-        let v = serde_json::to_value(Forecast::RunsOut { at: 5 }).expect("serializes");
+        let v = serde_json::to_value(Forecast::RunsOut {
+            at: 5,
+            from_average: true,
+        })
+        .expect("serializes");
         assert_eq!(v, serde_json::json!({"kind": "runs_out", "at": 5}));
         let v = serde_json::to_value(Forecast::AtReset { percent: 78.0 }).expect("serializes");
         assert_eq!(v, serde_json::json!({"kind": "at_reset", "percent": 78.0}));

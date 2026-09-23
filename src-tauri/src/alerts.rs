@@ -181,7 +181,11 @@ pub fn run_outs(
     }
     let mut out = Vec::new();
     for q in quotas.iter().filter(|q| enabled(settings, &q.key)) {
-        let Some(Forecast::RunsOut { at }) = forecasts.get(&q.key) else {
+        let Some(Forecast::RunsOut {
+            at,
+            from_average: false,
+        }) = forecasts.get(&q.key)
+        else {
             continue;
         };
         let early_enough = q.resets_at - at >= forecast::lookback(q.period_secs);
@@ -469,7 +473,13 @@ mod tests {
     }
 
     fn runs_out(key: &str, at: i64) -> HashMap<String, Forecast> {
-        HashMap::from([(key.to_string(), Forecast::RunsOut { at })])
+        HashMap::from([(
+            key.to_string(),
+            Forecast::RunsOut {
+                at,
+                from_average: false,
+            },
+        )])
     }
 
     #[test]
@@ -495,6 +505,23 @@ mod tests {
             run_outs(&mut st, &[next], &later, &on(), NOW + 4 * 3600).len(),
             1
         );
+    }
+
+    #[test]
+    fn a_window_average_run_out_never_alerts_nor_uses_up_the_window() {
+        // Early in a window the base is the window start: a burst then quiet looks like a run-out.
+        let mut st = AlertState::default();
+        let q = session(40.0, 4 * 3600);
+        let average = HashMap::from([(
+            "session".to_string(),
+            Forecast::RunsOut {
+                at: NOW + 3600,
+                from_average: true,
+            },
+        )]);
+        assert!(run_outs(&mut st, &[q.clone()], &average, &on(), NOW).is_empty());
+        let trend = runs_out("session", NOW + 3600);
+        assert_eq!(run_outs(&mut st, &[q], &trend, &on(), NOW + 180).len(), 1);
     }
 
     #[test]
