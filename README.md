@@ -43,6 +43,8 @@ Before the first launch:
 
 - **Claude Code** must be installed and logged in (`claude auth login`). The app reuses that
   login and never asks for credentials. See the [Claude Code docs](https://docs.claude.com/en/docs/claude-code).
+  Using only the Claude Desktop app? Install Claude Code and log in once with the same account:
+  the limits belong to the account, so the numbers match what Desktop and claude.ai show.
 - **macOS** warns that it cannot verify the developer (the build is unsigned). Open
   **System Settings → Privacy & Security** and click **Open Anyway**, or run
   `xattr -cr "/Applications/Claude Usage Monitor.app"` once.
@@ -69,7 +71,7 @@ the time until it resets. Other things you may see:
 |---|---|
 | `⚠` before a quota | that quota reached its highest alert level |
 | ` (429)` after the text | the API is rate limiting; the numbers may be a few minutes old |
-| `◷ —` | not logged in to Claude Code — run `claude auth login` |
+| `◷ —` | not logged in to Claude Code — run `claude auth login` (the popover links to the install docs) |
 | `◷ ! login` | the stored token expired — run `claude auth login` |
 | `◷ ! err` | the last check failed (network, server); the app retries on its own |
 

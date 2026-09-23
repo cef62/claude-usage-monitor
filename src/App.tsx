@@ -30,6 +30,7 @@ import { DEFAULT_POPOVER_SETTINGS, SESSION_SECS } from '@/lib/quota';
 
 const USAGE_URL = 'https://claude.ai/settings/usage';
 const BILLING_URL = 'https://claude.ai/settings/billing';
+const CLAUDE_CODE_URL = 'https://docs.claude.com/en/docs/claude-code';
 const STALE_GRACE = 30;
 
 function useNow(): number {
@@ -46,7 +47,7 @@ function statusText(status: Status, now: number): string | null {
     case 'ok':
       return null;
     case 'no_token':
-      return 'No Claude Code login found';
+      return 'No Claude Code login found — install Claude Code, run claude auth login';
     case 'auth_expired':
       return 'Session expired — run claude auth login';
     case 'rate_limited':
@@ -248,6 +249,11 @@ export default function App() {
       ))}
       {snap.extra && <ExtraCard e={snap.extra} />}
       <nav className="links">
+        {snap.status.kind === 'no_token' && (
+          <button type="button" onClick={() => openUrl(CLAUDE_CODE_URL)}>
+            Get Claude Code
+          </button>
+        )}
         <button type="button" onClick={() => openUrl(USAGE_URL)}>
           Usage
         </button>
