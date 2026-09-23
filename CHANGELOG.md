@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.11.5
+
+### Patch Changes
+
+- e46dfac: The "update available" notification shows the release's headline again: the update feed was published with empty notes since 0.11.3.
+
 ## 0.11.4
 
 ### Patch Changes
