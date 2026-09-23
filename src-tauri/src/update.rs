@@ -67,6 +67,11 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
 pub const FALLBACK_BODY: &str = "Right-click the tray icon → Help → Install update";
 const SUMMARY_CHARS: usize = 120;
 
+/// build-release.yml puts this bullet first in every release signed with the rotated key, so
+/// 0.11.2 and older (which trust only the leaked key and show the first bullet) are told to
+/// download by hand. Newer builds trust the new key and skip the bullet.
+pub const LEGACY_KEY_NOTICE: &str = "On 0.11.2 or older?";
+
 /// First changelog bullet of the release notes (`- <sha>: text` or `- text`), trimmed to fit a
 /// notification; the menu hint when the notes carry no bullet.
 pub fn notes_summary(body: Option<&str>) -> String {
@@ -74,7 +79,8 @@ pub fn notes_summary(body: Option<&str>) -> String {
         .unwrap_or("")
         .lines()
         .map(str::trim)
-        .find_map(|l| l.strip_prefix("- "))
+        .filter_map(|l| l.strip_prefix("- "))
+        .find(|l| !l.starts_with(LEGACY_KEY_NOTICE))
         .map(|l| match l.split_once(": ") {
             Some((sha, rest)) if sha.len() == 7 && sha.chars().all(|c| c.is_ascii_hexdigit()) => {
                 rest
@@ -287,5 +293,12 @@ mod tests {
         let out = notes_summary(Some(&long));
         assert_eq!(out.chars().count(), 120);
         assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn notes_summary_skips_the_legacy_key_notice() {
+        let body =
+            format!("- {LEGACY_KEY_NOTICE} download it from GitHub.\n- abcdef1: Real change.");
+        assert_eq!(notes_summary(Some(&body)), "Real change.");
     }
 }
