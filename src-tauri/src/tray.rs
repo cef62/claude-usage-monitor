@@ -52,11 +52,12 @@ const ALERT_LABELS: [(&str, &str); 4] = [
     ("alert_forecast", "Run-out forecast"),
 ];
 
-const POPOVER_LABELS: [(&str, &str); 4] = [
+const POPOVER_LABELS: [(&str, &str); 5] = [
     ("show_time_ticks", "Time ticks"),
     ("show_elapsed_marker", "Elapsed marker"),
     ("show_threshold_marks", "Threshold marks"),
     ("show_history", "History line"),
+    ("show_forecast", "Pace forecast"),
 ];
 
 #[derive(Debug, PartialEq)]
@@ -736,6 +737,14 @@ mod tests {
             parse_menu_id("set:alert_forecast"),
             Some(MenuAction::Toggle("alert_forecast".into()))
         );
+    }
+
+    #[test]
+    fn popover_menu_items_are_known_settings() {
+        assert!(POPOVER_LABELS
+            .iter()
+            .any(|(k, l)| *k == "show_forecast" && *l == "Pace forecast"));
+        assert!(POPOVER_LABELS.iter().all(|(k, _)| KEYS.contains(k)));
     }
 
     #[test]

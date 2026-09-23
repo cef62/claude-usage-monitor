@@ -89,7 +89,7 @@ function QuotaCard({
   const tickCount = q.period_secs === SESSION_SECS ? 5 : 7;
   const ticks = Array.from({ length: tickCount - 1 }, (_, i) => ((i + 1) / tickCount) * 100);
   const levels = levelsFor(q, settings);
-  const pace = forecast ? forecastText(forecast, now, q.resets_at) : null;
+  const pace = settings.show_forecast && forecast ? forecastText(forecast, now, q.resets_at) : null;
   return (
     <section className={`card ${color}`}>
       <header>

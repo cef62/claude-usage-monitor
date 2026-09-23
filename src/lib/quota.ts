@@ -49,6 +49,7 @@ export type PopoverSettings = {
   show_elapsed_marker: boolean;
   show_threshold_marks: boolean;
   show_history: boolean;
+  show_forecast: boolean;
 };
 
 export const DEFAULT_POPOVER_SETTINGS: PopoverSettings = {
@@ -58,4 +59,5 @@ export const DEFAULT_POPOVER_SETTINGS: PopoverSettings = {
   show_elapsed_marker: true,
   show_threshold_marks: true,
   show_history: true,
+  show_forecast: true,
 };
