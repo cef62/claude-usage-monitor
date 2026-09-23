@@ -37,8 +37,13 @@ jobs:
             $0 == "## " v { on = 1; next }
             on && /^## /  { exit }
             on && /^- /   { sub(/^- [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]: /, "- "); print }
-          ' CHANGELOG.md > notes.md
-          [ -s notes.md ] || echo "- See CHANGELOG.md for details." > notes.md
+          ' CHANGELOG.md > changes.md
+          [ -s changes.md ] || echo "- See CHANGELOG.md for details." > changes.md
+          # 0.11.2 and older trust only the rotated-out signing key: they show this first bullet in
+          # their update notification, then fail to install. 0.11.3+ skip it (update.rs
+          # LEGACY_KEY_NOTICE, same prefix). Keep it <= 120 chars or 0.11.2 truncates it.
+          echo "- On 0.11.2 or older? This update can't install in-app. Download it from github.com/cef62/claude-usage-monitor/releases" > notes.md
+          cat changes.md >> notes.md
           printf '\n%s\n' "macOS: the app is ad-hoc signed, not notarized: on first launch open System Settings → Privacy & Security and click Open Anyway, or run \`xattr -cr \"/Applications/Claude Usage Monitor.app\"\` once. Windows: the installer is unsigned. When SmartScreen appears, click More info → Run anyway." >> notes.md
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft \
             --title "Claude Usage Monitor $TAG" \
