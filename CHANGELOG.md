@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.11.6
+
+### Patch Changes
+
+- 2ef4785: The "update available" notification now says only how to install; the release notes did not fit and were cut off. What changed is on the release page (Help → About → release notes).
+
 ## 0.11.5
 
 ### Patch Changes
