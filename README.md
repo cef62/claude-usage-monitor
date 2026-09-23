@@ -1,5 +1,7 @@
 # Claude Usage Monitor
 
+[![Release](https://img.shields.io/github/v/release/cef62/claude-usage-monitor)](https://github.com/cef62/claude-usage-monitor/releases/latest) [![CI](https://github.com/cef62/claude-usage-monitor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cef62/claude-usage-monitor/actions/workflows/ci.yml)
+
 A tiny menu bar (macOS) / system tray (Windows) app that shows how much of your Claude plan you
 have used: the percentage consumed in the 5-hour session window and in the weekly window, and
 the countdown to each reset. Click it for a popover with usage bars, an elapsed-time marker,
