@@ -124,7 +124,7 @@ window. The first notification triggers the OS permission prompt — allow it.
 The app checks the [Releases page](https://github.com/cef62/claude-usage-monitor/releases/latest)
 30 seconds after launch and then once a day.
 
-- A newer version brings **one notification** (with the first line of its release notes) and a
+- A newer version brings **one notification** (what changed is in the release notes) and a
   **Help → Install update x.y.z…** item in the tray menu: click it to download, install and
   relaunch. Windows shows the installer's progress bar.
 - **Help → Check for updates…** checks on demand and reports the result as a notification.

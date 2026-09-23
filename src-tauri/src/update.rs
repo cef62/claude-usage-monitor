@@ -64,42 +64,9 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
     let _ = n.show();
 }
 
-pub const FALLBACK_BODY: &str = "Right-click the tray icon → Help → Install update";
-const SUMMARY_CHARS: usize = 120;
-
-/// build-release.yml puts this bullet first in every release signed with the rotated key, so
-/// 0.11.2 and older (which trust only the leaked key and show the first bullet) are told to
-/// download by hand. Newer builds trust the new key and skip the bullet.
-pub const LEGACY_KEY_NOTICE: &str = "On 0.11.2 or older?";
-
-/// First changelog bullet of the release notes (`- <sha>: text` or `- text`), trimmed to fit a
-/// notification; the menu hint when the notes carry no bullet.
-pub fn notes_summary(body: Option<&str>) -> String {
-    let bullet = body
-        .unwrap_or("")
-        .lines()
-        .map(str::trim)
-        .filter_map(|l| l.strip_prefix("- "))
-        .find(|l| !l.starts_with(LEGACY_KEY_NOTICE))
-        .map(|l| match l.split_once(": ") {
-            Some((sha, rest)) if sha.len() == 7 && sha.chars().all(|c| c.is_ascii_hexdigit()) => {
-                rest
-            }
-            _ => l,
-        })
-        .map(str::trim)
-        .filter(|l| !l.is_empty());
-    let Some(text) = bullet else {
-        return FALLBACK_BODY.to_string();
-    };
-    if text.chars().count() <= SUMMARY_CHARS {
-        text.to_string()
-    } else {
-        let mut cut: String = text.chars().take(SUMMARY_CHARS - 1).collect();
-        cut.push('…');
-        cut
-    }
-}
+/// Only the install hint: macOS shows about two lines of body, too few for release notes, and
+/// what changed is one click away on the release page (Help → About).
+const INSTALL_HINT: &str = "Right-click the tray icon → Help → Install update";
 
 pub fn install_item_text(version: Option<&str>) -> String {
     match version {
@@ -178,7 +145,6 @@ pub fn check(app: &AppHandle, trigger: Trigger) {
     match result {
         Ok(Some(update)) => {
             let version = update.version.clone();
-            let body = notes_summary(update.body.as_deref());
             st.available = Some(update);
             let announce = manual || should_notify(&version, st.notified.as_deref());
             if announce {
@@ -190,7 +156,7 @@ pub fn check(app: &AppHandle, trigger: Trigger) {
                 notify(
                     app,
                     &format!("Claude Usage Monitor {version} available"),
-                    &body,
+                    INSTALL_HINT,
                 );
             }
             log::write(app, &format!("update available {version}"));
@@ -278,27 +244,5 @@ mod tests {
     fn install_item_text_names_the_version() {
         assert_eq!(install_item_text(None), "Install update…");
         assert_eq!(install_item_text(Some("0.8.1")), "Install update 0.8.1…");
-    }
-
-    #[test]
-    fn notes_summary_takes_the_first_bullet() {
-        let body = "## 0.8.2\n\n### Patch Changes\n\n- 1a2b3c4: Reset notification once per window.\n- 5d6e7f8: Second line.\n\nmacOS: open anyway.";
-        assert_eq!(
-            notes_summary(Some(body)),
-            "Reset notification once per window."
-        );
-        assert_eq!(notes_summary(None), FALLBACK_BODY);
-        assert_eq!(notes_summary(Some("no bullets here")), FALLBACK_BODY);
-        let long = format!("- {}", "x".repeat(200));
-        let out = notes_summary(Some(&long));
-        assert_eq!(out.chars().count(), 120);
-        assert!(out.ends_with('…'));
-    }
-
-    #[test]
-    fn notes_summary_skips_the_legacy_key_notice() {
-        let body =
-            format!("- {LEGACY_KEY_NOTICE} download it from GitHub.\n- abcdef1: Real change.");
-        assert_eq!(notes_summary(Some(&body)), "Real change.");
     }
 }
