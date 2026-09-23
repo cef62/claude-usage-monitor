@@ -1,6 +1,6 @@
 ---
 type: "fix"
-status: "in-progress"
+status: "complete"
 files:
   - .secrets/ (removed from the tree)
   - src-tauri/tauri.conf.json
@@ -27,7 +27,7 @@ related-to:
 
 | Field       | Value                        |
 | ----------- | ---------------------------- |
-| **Status**  | in-progress                  |
+| **Status**  | complete                     |
 | **Branch**  | `fix/rotate-updater-key`     |
 | **Ticket**  | none                         |
 | **Created** | 2026-09-23                   |
@@ -59,6 +59,18 @@ Installed apps trust only the pubkey compiled into them, so the rotation goes th
 
 The new keypair and password live in `~/.tauri/claude-usage-monitor-v2.*` and the password
 manager, never inside the working tree.
+
+## Outcome
+
+- #44 merged; v0.11.3 published with every platform's `latest.json` signature from the old key
+  id `15F93E2CFFDF07CD`, as the bridge requires.
+- Repo secrets switched to the new key right after; the next CI build on #45 produced updater
+  signatures with it.
+- #45 merged: releases from 0.11.4 on open their notes with the `On 0.11.2 or older?` bullet.
+- The landing page warns 0.11.2 users (live with 0.11.3).
+- The old keypair and password were deleted from `~/.tauri/` and the clone's `.secrets/`.
+- Open check: 0.11.4 is the first release signed with the new key; confirm an in-app update from
+  0.11.3 succeeds and that 0.11.2 shows the notice.
 
 ## Lessons
 
