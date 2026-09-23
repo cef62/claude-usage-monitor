@@ -43,8 +43,9 @@ account gives the same numbers. The `no_token` banner now says so, the popover s
   Windows DPAPI). Rejected: infostealer behaviour, Keychain prompt on every ad-hoc-signed
   update, Chromium app-bound encryption on Windows, breaks silently on format changes.
 
-## Open question
+## Verified: Desktop's Code tab is not enough
 
-Desktop bundles its own Claude Code (`~/Library/Application Support/Claude/claude-code`). If a
-login from Desktop's Code tab writes the `Claude Code-credentials` Keychain entry, those users
-already work with no extra step. Not verified.
+Desktop bundles its own Claude Code (`~/Library/Application Support/Claude/claude-code`).
+Tested 2026-09-23: after `claude auth logout` the `Claude Code-credentials` Keychain entry was
+gone, and signing in / using Desktop's Code tab did not recreate it. Desktop-only users need the
+Claude Code CLI login; the banner and README guidance stand.
