@@ -89,7 +89,7 @@ function QuotaCard({
   const tickCount = q.period_secs === SESSION_SECS ? 5 : 7;
   const ticks = Array.from({ length: tickCount - 1 }, (_, i) => ((i + 1) / tickCount) * 100);
   const levels = levelsFor(q, settings);
-  const pace = forecast ? forecastText(forecast, now) : null;
+  const pace = forecast ? forecastText(forecast, now, q.resets_at) : null;
   return (
     <section className={`card ${color}`}>
       <header>
@@ -257,7 +257,7 @@ export default function App() {
           now={now}
           settings={settings}
           history={snap.history[q.key] ?? []}
-          forecast={snap.forecast[q.key]}
+          forecast={stale ? undefined : snap.forecast[q.key]}
         />
       ))}
       {snap.extra && <ExtraCard e={snap.extra} />}
