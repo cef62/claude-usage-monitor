@@ -42,6 +42,11 @@ const shot = (img: ImageMetadata, scale = 0.5) => ({
       <p class="downloads-note">
         Version {version} · Apple Silicon / Windows x64 · <a href={releases}>all releases</a>
       </p>
+      <p class="downloads-note">
+        On 0.11.2 or older? The update signing key changed in 0.11.3, so the in-app update to
+        0.11.4 or later fails: download the latest version above once.{' '}
+        <a href={`${base}/guide/#updates`}>Why</a>
+      </p>
     </div>
     <img
       class="hero-shot"
