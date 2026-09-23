@@ -9,7 +9,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Forecast {
-    /// 100 % is reached before the reset, at this unix second.
+    /// 100 % is reached by the reset, at this unix second (`at <= resets_at`).
     RunsOut { at: i64 },
     /// Projected utilization when the window resets; always < 100.
     AtReset { percent: f64 },
@@ -42,9 +42,10 @@ pub fn forecast(q: &Quota, samples: &[Sample], now: i64) -> Option<Forecast> {
         return Some(Forecast::AtReset { percent: q.percent });
     }
     // Compared as floats before any cast: a microscopic rate (f32 noise) must not overflow i64.
+    // `<=`: reaching 100 % exactly at the reset is a run-out, so `AtReset` stays below 100.
     let secs_to_full = (100.0 - q.percent) / rate;
     let secs_to_reset = (q.resets_at - now) as f64;
-    if secs_to_full < secs_to_reset {
+    if secs_to_full <= secs_to_reset {
         Some(Forecast::RunsOut {
             at: now + secs_to_full.ceil() as i64,
         })
@@ -120,6 +121,17 @@ mod tests {
     fn slow_rate_projects_the_percent_at_reset() {
         let f = forecast(&session(30.0), &[at(NOW - 3000, 20.0), at(NOW, 30.0)], NOW);
         assert!((at_reset(f) - 78.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn reaching_100_exactly_at_the_reset_is_a_run_out() {
+        // Binary-exact numbers: 32 % in 4096 s, 64 % left → 100 % in exactly 8192 s = the reset.
+        let q = Quota {
+            resets_at: NOW + 8192,
+            ..session(36.0)
+        };
+        let f = forecast(&q, &[at(NOW - 4096, 4.0), at(NOW, 36.0)], NOW);
+        assert_eq!(runs_out_at(f), NOW + 8192);
     }
 
     #[test]
