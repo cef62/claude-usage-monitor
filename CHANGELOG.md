@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.11.4
+
+### Patch Changes
+
+- 24b8753: Point Claude Desktop users to a one-time Claude Code login: the "no login" banner says how, and the popover links to the Claude Code install docs.
+
 ## 0.11.3
 
 ### Patch Changes
