@@ -1,7 +1,7 @@
 //! Pace forecast: where a quota lands at the recent rate. Pure; computed once per successful
 //! poll from the full-resolution history samples, shared by the popover and the alerts.
 
-use crate::history::{History, Sample};
+use crate::history::{self, History, Sample};
 use crate::usage::Quota;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -60,7 +60,7 @@ pub fn forecast(q: &Quota, samples: &[Sample], now: i64) -> Option<Forecast> {
 pub fn for_quotas(quotas: &[Quota], history: &History, now: i64) -> HashMap<String, Forecast> {
     quotas
         .iter()
-        .filter(|q| q.key == "session" || q.key == "weekly")
+        .filter(|q| history::tracked(&q.key))
         .filter_map(|q| {
             let samples = history.by_key.get(&q.key).map_or(&[][..], Vec::as_slice);
             forecast(q, samples, now).map(|f| (q.key.clone(), f))
