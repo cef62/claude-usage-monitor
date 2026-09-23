@@ -22,16 +22,16 @@ happen.
 | Rate | trailing rate over a lookback of `period_secs / 7`: 2571 s (~43 min) for the session, 86 400 s (24 h) for the weekly quota |
 | Base point | newest sample with `t <= now − lookback`, using its real `t`; none → window start at 0 % (windows always start at 0 %, so this is the window average) |
 | Too early | no forecast while the window is younger than `lookback / 2` (~21 min session, 12 h weekly) |
-| Result | `RunsOut { at }` when 100 % comes before `resets_at`, else `AtReset { percent }`; no forecast at ≥ 100 % |
+| Result | `RunsOut { at }` when 100 % comes by `resets_at` (`<=`), else `AtReset { percent }` (always < 100); no forecast at ≥ 100 %. `RunsOut` also carries `from_average` (not serialized) when the base was the window-start fallback |
 | Where computed | Rust only (`forecast.rs`), from the full-resolution samples; shipped in `Snapshot.forecast`. Popover and notification read the same value |
-| Popover | one line under "Resets in …"; red when `runs_out`, muted otherwise; no toggle |
-| Notification | once per quota per window, when `RunsOut` and the run-out is at least one lookback before the reset and usage is below the quota's top alert level; merged into a threshold alert that fires for the same quota in the same poll |
-| Setting | `alert_forecast: bool` (default true), `KEYS` → 14, Alerts ▸ **Run-out forecast** |
+| Popover | one line under "Resets in …"; red when `runs_out`, muted otherwise; hidden while the snapshot is stale, once the run-out time or the reset has passed, and when Popover ▸ **Pace forecast** is off; "at reset" shows at most ~99 % |
+| Notification | checked once per successful poll (`fetched_at`), not on every title tick; once per quota per window, when `RunsOut` from a real trend (not `from_average`) and the run-out is at least one lookback before the reset and usage is below the quota's top alert level; merged into a threshold alert that fires for the same quota in the same poll |
+| Settings | `alert_forecast: bool` (default true), Alerts ▸ **Run-out forecast**, gated by the quota's Session/Weekly alert switch like the other alerts; `show_forecast: bool` (default true), Popover ▸ **Pace forecast**, in `PopoverSettings`; `KEYS` → 15 |
 | Network | none; no cadence change |
 
 ## Out of scope
 
-Menu bar title / Windows icon changes, a popover toggle for the line, per-model quotas, a second
+Menu bar title / Windows icon changes, per-model quotas, a second
 notification when the pace picks up again in the same window, local clock times in notifications
 (Rust has no time-zone data; notifications use relative times like the existing ones), persisting
 the notification state across restarts.
@@ -177,6 +177,24 @@ tomorrow → weekday prefix; `at_reset` 77.6 → `At this pace: ~78% at reset`.
 
 Manual: `pnpm dev` shows both fixture lines; `pnpm tauri dev` shows real forecasts; Alerts ▸
 Run-out forecast toggles live; a burst of usage early in a session produces one notification.
+
+## Revisions after PR review (2026-09-23)
+
+The maintainer's review of PR #43 changed these points. The Decisions table includes them; the
+Components and Testing sections describe the design as first approved.
+
+- `run_outs` ran on every title tick against the cached snapshot, so with polls stalled a toggle
+  switched on later could announce a frozen (even past) run-out. It now runs once per
+  `fetched_at`.
+- A window-average forecast (no sample a full lookback old) could spend the window's only alert
+  on an early burst. `RunsOut.from_average` keeps it in the popover and out of the alerts.
+- Reaching 100 % exactly at the reset gave `AtReset { percent: 100 }`; it is now `RunsOut`, and
+  the popover caps "at reset" at 99 %.
+- An `at_reset` line outlived its window while polls failed, and a stale popover showed
+  yesterday's pace: `forecastText` takes `resets_at`, and the card hides the line while stale.
+- Popover ▸ Pace forecast toggle (`show_forecast`), like every other popover line.
+- `history::tracked(key)` is the one session/weekly filter for history and forecast.
+- README: all alerts follow the quota's Session/Weekly switch.
 
 ## Security notes
 

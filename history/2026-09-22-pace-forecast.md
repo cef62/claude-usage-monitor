@@ -4,6 +4,7 @@ status: "complete"
 files:
   - src-tauri/src/forecast.rs
   - src-tauri/src/lib.rs
+  - src-tauri/src/history.rs
   - src-tauri/src/poll.rs
   - src-tauri/src/alerts.rs
   - src-tauri/src/settings.rs
@@ -130,10 +131,25 @@ Detailed steps: `docs/superpowers/plans/2026-09-22-pace-forecast.md`.
 - Whole-branch review by a fresh reviewer: ready to merge, no Critical or Important
   findings; six Minor items deferred (see Final Notes).
 
+### Review round 1 - 2026-09-23 (PR #43, maintainer review)
+- `d5cfe3c` refactor: `history::tracked(key)` shared by history and forecast (Nit).
+- `7ef107c` fix: reaching 100 % exactly at the reset is `RunsOut`, not `AtReset { 100 }` (Bug).
+- `220f3ba` fix: `RunsOut.from_average` (not serialized); a window-average forecast never alerts
+  nor uses up the window (Bug: early-window false alarm).
+- `eeec7ea` fix: `run_outs` runs once per `fetched_at` instead of every title tick (Bug: stale
+  run-out alert; Nit: per-tick check).
+- `165d20e` fix: `forecastText` takes `resets_at` and hides past-window lines, "at reset" caps at
+  99 %, the card hides the line while stale (Bugs: `at_reset` outliving its window, stale UX).
+- `03a5603` feat: Popover ▸ Pace forecast toggle, `show_forecast` (UX).
+- docs (this commit): README states that every alert follows the quota's Session/Weekly switch
+  (Docs), mentions the toggle and the early-window wait; spec Decisions and a revisions
+  section; changeset mentions the toggle.
+
 ## Files Changed
 
 - `src-tauri/src/forecast.rs` - new: trailing-rate forecast, `Forecast` enum, `lookback`, `for_quotas`
 - `src-tauri/src/lib.rs` - registers `forecast`
+- `src-tauri/src/history.rs` - `tracked(key)`, the one session/weekly filter (review round 1)
 - `src-tauri/src/poll.rs` - `Snapshot.forecast`, computed once per successful poll
 - `src-tauri/src/alerts.rs` - `RunOut`, `run_outs`, `partition_run_outs`, `forecast_fired` state
 - `src-tauri/src/main.rs` - run-out notifications, merged into same-quota threshold alerts
@@ -152,9 +168,10 @@ Detailed steps: `docs/superpowers/plans/2026-09-22-pace-forecast.md`.
 
 ## Testing
 
-- `pnpm verify` green: Biome, tsc, Vitest 29/29, `cargo fmt --check`, `cargo clippy -D warnings`,
-  `cargo test` 126/126 (22 new: 13 forecast, 7 alerts, 1 settings, 1 tray; one poll test
-  extended); Vitest 3 new.
+- `pnpm verify` green: Biome, tsc, Vitest 31/31, `cargo fmt --check`, `cargo clippy -D warnings`,
+  `cargo test` 133/133 (29 new: 15 forecast, 9 alerts, 2 settings, 2 tray, 1 history; one
+  poll test extended); Vitest 5 new. Review round 1 added 7 Rust and 2 Vitest tests, each
+  watched failing first.
 - `pnpm tauri build --no-bundle` builds the release binary (bundling skipped: updater signing
   needs the maintainer's key).
 - Popover checked in a browser with the dev fixture: red run-out line on Session, muted
@@ -168,10 +185,8 @@ Detailed steps: `docs/superpowers/plans/2026-09-22-pace-forecast.md`.
   run-out comparison is done in floating point before any cast, so a microscopic rate cannot
   overflow; an absent quota gets no forecast even with old samples in `history.json`; only a
   same-quota alert/run-out pair merges.
-- Deferred minors from the review: compare `secs_to_full.ceil()` so a run-out under a second
-  before the reset reads as `AtReset`; share one `tracked(key)` filter between `history.rs` and
-  `forecast.rs`; add weekly-gate and `alert_weekly` tests for `run_outs`; drop the optional
-  chain in `App.tsx`; README wording (the line sits inside each card; the first ~43 min of a
-  session use the window average).
+- Deferred minors from the pre-PR review: the shared `tracked(key)` filter and the README
+  wording were done in review round 1, and the un-ceiled comparison is settled by `<=`. Still
+  open: weekly-gate and `alert_weekly` tests for `run_outs`; the optional chain in `App.tsx`.
 - The notification state is in memory, like the threshold alerts: a restart can repeat a
   run-out notification in the same window.
