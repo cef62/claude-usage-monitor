@@ -129,6 +129,8 @@ The app checks the [Releases page](https://github.com/cef62/claude-usage-monitor
 - Update packages are signature-checked against a key built into the app, so only releases
   from this repository install.
 - Builds older than 0.8.0 have no updater: install 0.8.0 by hand once.
+- The signing key was rotated in 0.11.3. Versions 0.11.2 and older can install 0.11.3 but no
+  later release: download the latest release by hand once.
 
 ## Configure
 
