@@ -25,6 +25,8 @@ pub struct AlertState {
     fired: HashSet<(String, i64, u8)>,
     armed: HashMap<String, i64>,
     forecast_fired: HashSet<(String, i64)>,
+    /// `fetched_at` of the last snapshot `run_outs` looked at.
+    run_outs_checked: Option<i64>,
 }
 
 /// A quota whose window rolled over after the top level had fired in the previous one.
@@ -166,16 +168,24 @@ pub struct RunOut {
 /// At most one per quota per window, only when running out costs at least one lookback of the
 /// window, and only below the top level, where the threshold alert already speaks. Returned
 /// entries count as fired whether the caller sends them alone or merges them into an alert.
+/// Checked once per successful poll (`fetched_at`), never on the ticks in between.
 pub fn run_outs(
     state: &mut AlertState,
     quotas: &[Quota],
     forecasts: &HashMap<String, Forecast>,
     settings: &Settings,
+    fetched_at: Option<i64>,
     now: i64,
 ) -> Vec<RunOut> {
     state
         .forecast_fired
         .retain(|(_, resets_at)| *resets_at >= now - PRUNE_AFTER_SECS);
+    // A forecast only changes with a successful poll. Re-checking a frozen one (polls stalled,
+    // then a toggle switched on) would announce a run-out that may already be stale.
+    if fetched_at.is_none() || fetched_at == state.run_outs_checked {
+        return Vec::new();
+    }
+    state.run_outs_checked = fetched_at;
     if !settings.alert_forecast {
         return Vec::new();
     }
@@ -487,22 +497,30 @@ mod tests {
         let mut st = AlertState::default();
         let q = session(40.0, 4 * 3600);
         let f = runs_out("session", NOW + 3600);
-        let out = run_outs(&mut st, &[q.clone()], &f, &on(), NOW);
+        let out = run_outs(&mut st, &[q.clone()], &f, &on(), Some(NOW), NOW);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].key, "session");
         assert_eq!(out[0].label, "Session");
         assert_eq!(out[0].at, NOW + 3600);
         assert_eq!(out[0].resets_at, q.resets_at);
-        assert!(run_outs(&mut st, &[q.clone()], &f, &on(), NOW + 180).is_empty());
+        assert!(run_outs(&mut st, &[q.clone()], &f, &on(), Some(NOW + 180), NOW + 180).is_empty());
         let jittered = Quota {
             resets_at: q.resets_at + 1,
             ..q.clone()
         };
-        assert!(run_outs(&mut st, &[jittered], &f, &on(), NOW + 360).is_empty());
+        assert!(run_outs(&mut st, &[jittered], &f, &on(), Some(NOW + 360), NOW + 360).is_empty());
         let next = next_window(&q);
         let later = runs_out("session", next.resets_at - 3 * 3600);
         assert_eq!(
-            run_outs(&mut st, &[next], &later, &on(), NOW + 4 * 3600).len(),
+            run_outs(
+                &mut st,
+                &[next],
+                &later,
+                &on(),
+                Some(NOW + 4 * 3600),
+                NOW + 4 * 3600
+            )
+            .len(),
             1
         );
     }
@@ -519,9 +537,35 @@ mod tests {
                 from_average: true,
             },
         )]);
-        assert!(run_outs(&mut st, &[q.clone()], &average, &on(), NOW).is_empty());
+        assert!(run_outs(&mut st, &[q.clone()], &average, &on(), Some(NOW), NOW).is_empty());
         let trend = runs_out("session", NOW + 3600);
-        assert_eq!(run_outs(&mut st, &[q], &trend, &on(), NOW + 180).len(), 1);
+        assert_eq!(
+            run_outs(&mut st, &[q], &trend, &on(), Some(NOW + 180), NOW + 180).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn run_outs_are_checked_once_per_successful_poll() {
+        // Polls stalled after NOW, so the forecast is frozen: turning the alert on later must not
+        // announce it. The next successful poll brings a fresh forecast and may.
+        let mut st = AlertState::default();
+        let q = session(40.0, 4 * 3600);
+        let f = runs_out("session", NOW + 3600);
+        let mut off = on();
+        assert!(off.toggle("alert_forecast"));
+        assert!(run_outs(&mut st, &[q.clone()], &f, &off, Some(NOW), NOW).is_empty());
+        assert!(run_outs(&mut st, &[q.clone()], &f, &on(), Some(NOW), NOW + 1800).is_empty());
+        let fresh = run_outs(
+            &mut st,
+            &[q.clone()],
+            &f,
+            &on(),
+            Some(NOW + 1900),
+            NOW + 1900,
+        );
+        assert_eq!(fresh.len(), 1);
+        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), None, NOW).is_empty());
     }
 
     #[test]
@@ -530,10 +574,26 @@ mod tests {
         let f = runs_out("session", NOW + 3600);
         let mut off = on();
         assert!(off.toggle("alert_forecast"));
-        assert!(run_outs(&mut AlertState::default(), &[q.clone()], &f, &off, NOW).is_empty());
+        assert!(run_outs(
+            &mut AlertState::default(),
+            &[q.clone()],
+            &f,
+            &off,
+            Some(NOW),
+            NOW
+        )
+        .is_empty());
         let mut no_session = on();
         assert!(no_session.toggle("alert_session"));
-        assert!(run_outs(&mut AlertState::default(), &[q], &f, &no_session, NOW).is_empty());
+        assert!(run_outs(
+            &mut AlertState::default(),
+            &[q],
+            &f,
+            &no_session,
+            Some(NOW),
+            NOW
+        )
+        .is_empty());
     }
 
     #[test]
@@ -541,21 +601,21 @@ mod tests {
         // Resets in 4 h; running out 30 min before is less than the ~43 min lookback.
         let q = session(40.0, 4 * 3600);
         let f = runs_out("session", q.resets_at - 1800);
-        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), NOW).is_empty());
+        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), Some(NOW), NOW).is_empty());
     }
 
     #[test]
     fn run_out_is_silent_at_the_top_level() {
         let q = session(95.0, 4 * 3600);
         let f = runs_out("session", NOW + 600);
-        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), NOW).is_empty());
+        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), Some(NOW), NOW).is_empty());
     }
 
     #[test]
     fn at_reset_forecasts_never_fire() {
         let q = session(40.0, 4 * 3600);
         let f = HashMap::from([("session".to_string(), Forecast::AtReset { percent: 70.0 })]);
-        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), NOW).is_empty());
+        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), Some(NOW), NOW).is_empty());
     }
 
     #[test]
@@ -563,7 +623,7 @@ mod tests {
         let mut st = AlertState::default();
         st.forecast_fired
             .insert(("session".to_string(), NOW - 2 * 86400));
-        run_outs(&mut st, &[], &HashMap::new(), &on(), NOW);
+        run_outs(&mut st, &[], &HashMap::new(), &on(), Some(NOW), NOW);
         assert!(st.forecast_fired.is_empty());
     }
 

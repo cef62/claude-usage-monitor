@@ -102,6 +102,7 @@ fn notify_thresholds(app: &AppHandle, snapshot: &Snapshot) {
             &snapshot.quotas,
             &snapshot.forecast,
             &settings,
+            snapshot.fetched_at,
             now,
         );
         (resets, due, run_outs)
