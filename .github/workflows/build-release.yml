@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       id: ${{ steps.release.outputs.id }}
+      notes: ${{ steps.release.outputs.notes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,6 +50,7 @@ jobs:
             --title "Claude Usage Monitor $TAG" \
             --notes-file notes.md
           echo "id=$(gh release view "$TAG" --json databaseId -q .databaseId)" >> "$GITHUB_OUTPUT"
+          { echo 'notes<<EOF_NOTES'; cat notes.md; echo 'EOF_NOTES'; } >> "$GITHUB_OUTPUT"
 
   build:
     needs: create-release
@@ -92,6 +94,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.create-release.outputs.id }}
+          # With releaseId set the action creates nothing, but it still takes latest.json's
+          # `notes` from releaseBody; without it the app's update notification has no text.
+          releaseBody: ${{ needs.create-release.outputs.notes }}
           includeUpdaterJson: true
           args: ${{ matrix.args }}
 
