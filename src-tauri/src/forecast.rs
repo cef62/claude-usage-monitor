@@ -17,7 +17,8 @@ pub enum Forecast {
         #[serde(skip)]
         from_average: bool,
     },
-    /// Projected utilization when the window resets; always < 100.
+    /// Projected utilization when the window resets; below 100 up to float rounding (the popover
+    /// caps it at 99, alerts only read `RunsOut`).
     AtReset { percent: f64 },
 }
 

@@ -198,6 +198,10 @@ pub fn run_outs(
         else {
             continue;
         };
+        // Implied by the fresh-poll gate above; kept so this function is right on its own.
+        if *at <= now {
+            continue;
+        }
         let early_enough = q.resets_at - at >= forecast::lookback(q.period_secs);
         let below_top = top(settings.levels(&q.key)).is_none_or(|t| q.percent < f64::from(t));
         let fired = state
@@ -566,6 +570,25 @@ mod tests {
         );
         assert_eq!(fresh.len(), 1);
         assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), None, NOW).is_empty());
+    }
+
+    #[test]
+    fn a_run_out_time_already_past_never_alerts() {
+        // Belt and braces for the fresh-poll gate: a fresh snapshot must still not announce a
+        // run-out whose time has come.
+        let q = session(40.0, 4 * 3600);
+        for at in [NOW - 60, NOW] {
+            let f = runs_out("session", at);
+            assert!(run_outs(
+                &mut AlertState::default(),
+                &[q.clone()],
+                &f,
+                &on(),
+                Some(NOW),
+                NOW
+            )
+            .is_empty());
+        }
     }
 
     #[test]
