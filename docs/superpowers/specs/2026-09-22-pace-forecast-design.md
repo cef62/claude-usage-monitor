@@ -25,7 +25,7 @@ happen.
 | Result | `RunsOut { at }` when 100 % comes by `resets_at` (`<=`), else `AtReset { percent }` (always < 100); no forecast at ≥ 100 %. `RunsOut` also carries `from_average` (not serialized) when the base was the window-start fallback |
 | Where computed | Rust only (`forecast.rs`), from the full-resolution samples; shipped in `Snapshot.forecast`. Popover and notification read the same value |
 | Popover | one line under "Resets in …"; red when `runs_out`, muted otherwise; hidden while the snapshot is stale, once the run-out time or the reset has passed, and when Popover ▸ **Pace forecast** is off; "at reset" shows at most ~99 % |
-| Notification | checked once per successful poll (`fetched_at`), not on every title tick; once per quota per window, when `RunsOut` from a real trend (not `from_average`) and the run-out is at least one lookback before the reset and usage is below the quota's top alert level; merged into a threshold alert that fires for the same quota in the same poll |
+| Notification | checked once per successful poll (`fetched_at`), not on every title tick; never for an `at` already past; once per quota per window, when `RunsOut` from a real trend (not `from_average`) and the run-out is at least one lookback before the reset and usage is below the quota's top alert level; merged into a threshold alert that fires for the same quota in the same poll |
 | Settings | `alert_forecast: bool` (default true), Alerts ▸ **Run-out forecast**, gated by the quota's Session/Weekly alert switch like the other alerts; `show_forecast: bool` (default true), Popover ▸ **Pace forecast**, in `PopoverSettings`; `KEYS` → 15 |
 | Network | none; no cadence change |
 
@@ -185,7 +185,7 @@ Components and Testing sections describe the design as first approved.
 
 - `run_outs` ran on every title tick against the cached snapshot, so with polls stalled a toggle
   switched on later could announce a frozen (even past) run-out. It now runs once per
-  `fetched_at`.
+  `fetched_at`, and skips any run-out whose `at` is not after `now`.
 - A window-average forecast (no sample a full lookback old) could spend the window's only alert
   on an early burst. `RunsOut.from_average` keeps it in the popover and out of the alerts.
 - Reaching 100 % exactly at the reset gave `AtReset { percent: 100 }`; it is now `RunsOut`, and

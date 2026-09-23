@@ -141,6 +141,9 @@ Detailed steps: `docs/superpowers/plans/2026-09-22-pace-forecast.md`.
 - `165d20e` fix: `forecastText` takes `resets_at` and hides past-window lines, "at reset" caps at
   99 %, the card hides the line while stale (Bugs: `at_reset` outliving its window, stale UX).
 - `03a5603` feat: Popover ▸ Pace forecast toggle, `show_forecast` (UX).
+- `5356051` fix: the maintainer's `at <= now` guard in `run_outs`, on top of the fresh-poll gate
+  (Bug 1), and the `AtReset` doc says below 100 up to float rounding. Added after a second
+  reviewer confirmed all eight comments resolved and suggested both.
 - docs (this commit): README states that every alert follows the quota's Session/Weekly switch
   (Docs), mentions the toggle and the early-window wait; spec Decisions and a revisions
   section; changeset mentions the toggle.
@@ -169,8 +172,8 @@ Detailed steps: `docs/superpowers/plans/2026-09-22-pace-forecast.md`.
 ## Testing
 
 - `pnpm verify` green: Biome, tsc, Vitest 31/31, `cargo fmt --check`, `cargo clippy -D warnings`,
-  `cargo test` 133/133 (29 new: 15 forecast, 9 alerts, 2 settings, 2 tray, 1 history; one
-  poll test extended); Vitest 5 new. Review round 1 added 7 Rust and 2 Vitest tests, each
+  `cargo test` 134/134 (30 new: 15 forecast, 10 alerts, 2 settings, 2 tray, 1 history; one
+  poll test extended); Vitest 5 new. Review round 1 added 8 Rust and 2 Vitest tests, each
   watched failing first.
 - `pnpm tauri build --no-bundle` builds the release binary (bundling skipped: updater signing
   needs the maintainer's key).
