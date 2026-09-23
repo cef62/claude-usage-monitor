@@ -132,6 +132,8 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
   `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`.
 - The app is ad-hoc signed (`signingIdentity: "-"`), not notarized, until an Apple Developer
   account exists. The updater verifies minisign signatures, so unsigned OS bundles are fine.
+- The updater signing keypair lives in `~/.tauri/` and the `TAURI_SIGNING_PRIVATE_KEY*` repo
+  secrets, never in the working tree (the first key leaked that way and was rotated in 0.11.3).
 
 ## Commands
 

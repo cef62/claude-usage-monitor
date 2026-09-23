@@ -49,7 +49,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE1RjkzRTJDRkZERjA3Q0QKUldUTkI5Ly9MRDc1RmNjYkNaaU5XdTEyNUFLSnZXZlg5bkFzdEp6NzZOOUpqSlFqSi9zQU80NEsK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM2MkQ4NzYyRDJFNkUzMjUKUldRbDQrYlNZb2N0eG1IdzNGZkgyL2lFY1ZsOVdnTTNmMHlTMUZWOStDV1Bady9pY2o1RTNkckgK",
       "endpoints": [
         "https://github.com/cef62/claude-usage-monitor/releases/latest/download/latest.json"
       ],
