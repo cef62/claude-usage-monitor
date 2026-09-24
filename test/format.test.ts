@@ -4,6 +4,7 @@ import {
   clock,
   countdown,
   elapsedPct,
+  forecastText,
   markClass,
   money,
   relative,
@@ -107,5 +108,44 @@ describe('sparkPoints', () => {
       ),
     ).toBe('0,28 50,0 100,0');
     expect(sparkPoints([{ t: start, pct: 10 }], start, 1000, 100, 28)).toBe('');
+  });
+});
+
+describe('forecastText', () => {
+  // The quota's window resets four days from NOW.
+  const RESET = NOW + 4 * 86400;
+
+  it('names the run-out time, with the weekday when not today', () => {
+    expect(forecastText({ kind: 'runs_out', at: NOW + 2 * 3600 + 13 * 60 }, NOW, RESET)).toBe(
+      'At this pace: 100% at 16:45',
+    );
+    expect(
+      forecastText({ kind: 'runs_out', at: NOW + 3 * 86400 + 6 * 3600 + 28 * 60 }, NOW, RESET),
+    ).toBe('At this pace: 100% at Sat 21:00');
+  });
+
+  it('rounds the projected percent at reset', () => {
+    expect(forecastText({ kind: 'at_reset', percent: 77.6 }, NOW, RESET)).toBe(
+      'At this pace: ~78% at reset',
+    );
+  });
+
+  it('never rounds a projection up to 100% at reset', () => {
+    // 100% is a run-out (red); a grey "~100% at reset" would contradict it.
+    expect(forecastText({ kind: 'at_reset', percent: 99.6 }, NOW, RESET)).toBe(
+      'At this pace: ~99% at reset',
+    );
+  });
+
+  it('hides a run-out time that is already in the past', () => {
+    // A snapshot from before a sleep: the popover must not claim "100% at 14:02" at 14:32.
+    expect(forecastText({ kind: 'runs_out', at: NOW - 30 * 60 }, NOW, RESET)).toBeNull();
+    expect(forecastText({ kind: 'runs_out', at: NOW }, NOW, RESET)).toBeNull();
+  });
+
+  it('hides the line once its window has reset', () => {
+    // Polls failing past the reset: the forecast belongs to a window that is over.
+    expect(forecastText({ kind: 'at_reset', percent: 78 }, NOW, NOW)).toBeNull();
+    expect(forecastText({ kind: 'at_reset', percent: 78 }, NOW, NOW - 60)).toBeNull();
   });
 });

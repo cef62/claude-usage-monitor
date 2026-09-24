@@ -1,4 +1,4 @@
-import type { ExtraUsage, Quota, Sample } from './quota';
+import type { ExtraUsage, Forecast, Quota, Sample } from './quota';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -89,4 +89,14 @@ export function sparkPoints(
 
 function round(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+// Null once the forecast is out of date: its run-out time or its window's reset has passed (a
+// snapshot from before a sleep, or polls failing). "At reset" stops at 99: 100 is a run-out.
+export function forecastText(f: Forecast, now: number, resetsAt: number): string | null {
+  if (resetsAt <= now) return null;
+  if (f.kind === 'at_reset') {
+    return `At this pace: ~${Math.min(99, Math.round(f.percent))}% at reset`;
+  }
+  return f.at > now ? `At this pace: 100% at ${clock(f.at, now)}` : null;
 }

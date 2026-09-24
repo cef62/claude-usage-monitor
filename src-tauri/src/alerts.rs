@@ -1,5 +1,6 @@
 //! Threshold alerts: pure decision logic. Delivery (notifications) lives in main.rs.
 
+use crate::forecast::{self, Forecast};
 use crate::settings::Settings;
 use crate::usage::Quota;
 use std::collections::{HashMap, HashSet};
@@ -17,11 +18,15 @@ fn already_fired(state: &AlertState, key: &str, resets_at: i64, level: u8) -> bo
 }
 
 /// Levels already announced, keyed by (quota key, reset window, level), plus the window in
-/// which each quota last hit its top level — that arms the reset notification. In-memory only.
+/// which each quota last hit its top level — that arms the reset notification — and the
+/// windows that already had a run-out notification. In-memory only.
 #[derive(Default)]
 pub struct AlertState {
     fired: HashSet<(String, i64, u8)>,
     armed: HashMap<String, i64>,
+    forecast_fired: HashSet<(String, i64)>,
+    /// `fetched_at` of the last snapshot `run_outs` looked at.
+    run_outs_checked: Option<i64>,
 }
 
 /// A quota whose window rolled over after the top level had fired in the previous one.
@@ -149,6 +154,80 @@ pub fn marker(quotas: &[Quota], settings: &Settings) -> bool {
         enabled(settings, &q.key)
             && top(settings.levels(&q.key)).is_some_and(|t| q.percent >= f64::from(t))
     })
+}
+
+/// A quota the pace forecast says hits 100 % well before its reset.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RunOut {
+    pub key: String,
+    pub label: String,
+    pub at: i64,
+    pub resets_at: i64,
+}
+
+/// At most one per quota per window, only when running out costs at least one lookback of the
+/// window, and only below the top level, where the threshold alert already speaks. Returned
+/// entries count as fired whether the caller sends them alone or merges them into an alert.
+/// Checked once per successful poll (`fetched_at`), never on the ticks in between.
+pub fn run_outs(
+    state: &mut AlertState,
+    quotas: &[Quota],
+    forecasts: &HashMap<String, Forecast>,
+    settings: &Settings,
+    fetched_at: Option<i64>,
+    now: i64,
+) -> Vec<RunOut> {
+    state
+        .forecast_fired
+        .retain(|(_, resets_at)| *resets_at >= now - PRUNE_AFTER_SECS);
+    // A forecast only changes with a successful poll. Re-checking a frozen one (polls stalled,
+    // then a toggle switched on) would announce a run-out that may already be stale.
+    if fetched_at.is_none() || fetched_at == state.run_outs_checked {
+        return Vec::new();
+    }
+    state.run_outs_checked = fetched_at;
+    if !settings.alert_forecast {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for q in quotas.iter().filter(|q| enabled(settings, &q.key)) {
+        let Some(Forecast::RunsOut {
+            at,
+            from_average: false,
+        }) = forecasts.get(&q.key)
+        else {
+            continue;
+        };
+        // Implied by the fresh-poll gate above; kept so this function is right on its own.
+        if *at <= now {
+            continue;
+        }
+        let early_enough = q.resets_at - at >= forecast::lookback(q.period_secs);
+        let below_top = top(settings.levels(&q.key)).is_none_or(|t| q.percent < f64::from(t));
+        let fired = state
+            .forecast_fired
+            .iter()
+            .any(|(k, r)| *k == q.key && (r - q.resets_at).abs() <= SAME_WINDOW_SECS);
+        if !early_enough || !below_top || fired {
+            continue;
+        }
+        state.forecast_fired.insert((q.key.clone(), q.resets_at));
+        out.push(RunOut {
+            key: q.key.clone(),
+            label: label(&q.key).to_string(),
+            at: *at,
+            resets_at: q.resets_at,
+        });
+    }
+    out
+}
+
+/// Splits run-outs into those that ride along with a threshold alert for the same quota in
+/// this cycle (one notification instead of two) and those sent on their own.
+pub fn partition_run_outs(due: &[Alert], run_outs: Vec<RunOut>) -> (Vec<RunOut>, Vec<RunOut>) {
+    run_outs
+        .into_iter()
+        .partition(|r| due.iter().any(|a| a.key == r.key))
 }
 
 #[cfg(test)]
@@ -405,5 +484,191 @@ mod tests {
         assert!(resets(&mut st, &[next_window(&blocked)], &no_session).is_empty());
         // still armed: turning the toggles back on delivers it
         assert_eq!(resets(&mut st, &[next_window(&blocked)], &on()).len(), 1);
+    }
+
+    fn runs_out(key: &str, at: i64) -> HashMap<String, Forecast> {
+        HashMap::from([(
+            key.to_string(),
+            Forecast::RunsOut {
+                at,
+                from_average: false,
+            },
+        )])
+    }
+
+    #[test]
+    fn run_out_fires_once_per_window() {
+        let mut st = AlertState::default();
+        let q = session(40.0, 4 * 3600);
+        let f = runs_out("session", NOW + 3600);
+        let out = run_outs(&mut st, &[q.clone()], &f, &on(), Some(NOW), NOW);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].key, "session");
+        assert_eq!(out[0].label, "Session");
+        assert_eq!(out[0].at, NOW + 3600);
+        assert_eq!(out[0].resets_at, q.resets_at);
+        assert!(run_outs(&mut st, &[q.clone()], &f, &on(), Some(NOW + 180), NOW + 180).is_empty());
+        let jittered = Quota {
+            resets_at: q.resets_at + 1,
+            ..q.clone()
+        };
+        assert!(run_outs(&mut st, &[jittered], &f, &on(), Some(NOW + 360), NOW + 360).is_empty());
+        let next = next_window(&q);
+        let later = runs_out("session", next.resets_at - 3 * 3600);
+        assert_eq!(
+            run_outs(
+                &mut st,
+                &[next],
+                &later,
+                &on(),
+                Some(NOW + 4 * 3600),
+                NOW + 4 * 3600
+            )
+            .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_window_average_run_out_never_alerts_nor_uses_up_the_window() {
+        // Early in a window the base is the window start: a burst then quiet looks like a run-out.
+        let mut st = AlertState::default();
+        let q = session(40.0, 4 * 3600);
+        let average = HashMap::from([(
+            "session".to_string(),
+            Forecast::RunsOut {
+                at: NOW + 3600,
+                from_average: true,
+            },
+        )]);
+        assert!(run_outs(&mut st, &[q.clone()], &average, &on(), Some(NOW), NOW).is_empty());
+        let trend = runs_out("session", NOW + 3600);
+        assert_eq!(
+            run_outs(&mut st, &[q], &trend, &on(), Some(NOW + 180), NOW + 180).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn run_outs_are_checked_once_per_successful_poll() {
+        // Polls stalled after NOW, so the forecast is frozen: turning the alert on later must not
+        // announce it. The next successful poll brings a fresh forecast and may.
+        let mut st = AlertState::default();
+        let q = session(40.0, 4 * 3600);
+        let f = runs_out("session", NOW + 3600);
+        let mut off = on();
+        assert!(off.toggle("alert_forecast"));
+        assert!(run_outs(&mut st, &[q.clone()], &f, &off, Some(NOW), NOW).is_empty());
+        assert!(run_outs(&mut st, &[q.clone()], &f, &on(), Some(NOW), NOW + 1800).is_empty());
+        let fresh = run_outs(
+            &mut st,
+            &[q.clone()],
+            &f,
+            &on(),
+            Some(NOW + 1900),
+            NOW + 1900,
+        );
+        assert_eq!(fresh.len(), 1);
+        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), None, NOW).is_empty());
+    }
+
+    #[test]
+    fn a_run_out_time_already_past_never_alerts() {
+        // Belt and braces for the fresh-poll gate: a fresh snapshot must still not announce a
+        // run-out whose time has come.
+        let q = session(40.0, 4 * 3600);
+        for at in [NOW - 60, NOW] {
+            let f = runs_out("session", at);
+            assert!(run_outs(
+                &mut AlertState::default(),
+                &[q.clone()],
+                &f,
+                &on(),
+                Some(NOW),
+                NOW
+            )
+            .is_empty());
+        }
+    }
+
+    #[test]
+    fn run_out_needs_both_toggles() {
+        let q = session(40.0, 4 * 3600);
+        let f = runs_out("session", NOW + 3600);
+        let mut off = on();
+        assert!(off.toggle("alert_forecast"));
+        assert!(run_outs(
+            &mut AlertState::default(),
+            &[q.clone()],
+            &f,
+            &off,
+            Some(NOW),
+            NOW
+        )
+        .is_empty());
+        let mut no_session = on();
+        assert!(no_session.toggle("alert_session"));
+        assert!(run_outs(
+            &mut AlertState::default(),
+            &[q],
+            &f,
+            &no_session,
+            Some(NOW),
+            NOW
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn run_out_close_to_the_reset_is_silent() {
+        // Resets in 4 h; running out 30 min before is less than the ~43 min lookback.
+        let q = session(40.0, 4 * 3600);
+        let f = runs_out("session", q.resets_at - 1800);
+        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), Some(NOW), NOW).is_empty());
+    }
+
+    #[test]
+    fn run_out_is_silent_at_the_top_level() {
+        let q = session(95.0, 4 * 3600);
+        let f = runs_out("session", NOW + 600);
+        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), Some(NOW), NOW).is_empty());
+    }
+
+    #[test]
+    fn at_reset_forecasts_never_fire() {
+        let q = session(40.0, 4 * 3600);
+        let f = HashMap::from([("session".to_string(), Forecast::AtReset { percent: 70.0 })]);
+        assert!(run_outs(&mut AlertState::default(), &[q], &f, &on(), Some(NOW), NOW).is_empty());
+    }
+
+    #[test]
+    fn run_out_entries_from_old_windows_are_pruned() {
+        let mut st = AlertState::default();
+        st.forecast_fired
+            .insert(("session".to_string(), NOW - 2 * 86400));
+        run_outs(&mut st, &[], &HashMap::new(), &on(), Some(NOW), NOW);
+        assert!(st.forecast_fired.is_empty());
+    }
+
+    #[test]
+    fn run_outs_merge_only_into_a_same_quota_alert() {
+        let alert = Alert {
+            key: "session".into(),
+            label: "Session".into(),
+            level: 80,
+            percent: 85.0,
+            resets_at: NOW + 7200,
+        };
+        let r = |key: &str| RunOut {
+            key: key.into(),
+            label: key.into(),
+            at: NOW + 3600,
+            resets_at: NOW + 7200,
+        };
+        let (merged, alone) = partition_run_outs(&[alert], vec![r("session"), r("weekly")]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].key, "session");
+        assert_eq!(alone.len(), 1);
+        assert_eq!(alone[0].key, "weekly");
     }
 }

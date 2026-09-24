@@ -12,6 +12,11 @@ pub const MIN_GAP_SECS: i64 = 60;
 pub const POPOVER_POINTS: usize = 200;
 const FILE_NAME: &str = "history.json";
 
+/// The quotas that get a history (and so a sparkline and a forecast); per-model quotas do not.
+pub fn tracked(key: &str) -> bool {
+    key == "session" || key == "weekly"
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Sample {
     pub t: i64,
@@ -29,10 +34,7 @@ impl History {
     /// whether anything changed, so the caller writes the file only when needed.
     pub fn record(&mut self, quotas: &[Quota], now: i64) -> bool {
         let mut changed = false;
-        for q in quotas
-            .iter()
-            .filter(|q| q.key == "session" || q.key == "weekly")
-        {
+        for q in quotas.iter().filter(|q| tracked(&q.key)) {
             let window_start = q.resets_at - q.period_secs as i64;
             let samples = self.by_key.entry(q.key.clone()).or_default();
             let before = samples.len();
@@ -119,6 +121,13 @@ mod tests {
             quota("weekly", 60.0, 3 * 86400, WEEKLY_SECS),
             quota("weekly:fable", 99.0, 3 * 86400, WEEKLY_SECS),
         ]
+    }
+
+    #[test]
+    fn tracks_session_and_weekly_only() {
+        assert!(tracked("session"));
+        assert!(tracked("weekly"));
+        assert!(!tracked("weekly:fable"));
     }
 
     #[test]

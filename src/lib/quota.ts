@@ -25,6 +25,9 @@ export type ExtraUsage = {
 
 export type Sample = { t: number; pct: number };
 
+// Mirrors src-tauri/src/forecast.rs: where usage lands at the recent pace.
+export type Forecast = { kind: 'runs_out'; at: number } | { kind: 'at_reset'; percent: number };
+
 export type Snapshot = {
   quotas: Quota[];
   plan: string | null;
@@ -33,6 +36,7 @@ export type Snapshot = {
   next_poll_at: number;
   status: Status;
   history: Record<string, Sample[]>;
+  forecast: Record<string, Forecast>;
 };
 
 export const SESSION_SECS = 5 * 3600;
@@ -45,6 +49,7 @@ export type PopoverSettings = {
   show_elapsed_marker: boolean;
   show_threshold_marks: boolean;
   show_history: boolean;
+  show_forecast: boolean;
 };
 
 export const DEFAULT_POPOVER_SETTINGS: PopoverSettings = {
@@ -54,4 +59,5 @@ export const DEFAULT_POPOVER_SETTINGS: PopoverSettings = {
   show_elapsed_marker: true,
   show_threshold_marks: true,
   show_history: true,
+  show_forecast: true,
 };

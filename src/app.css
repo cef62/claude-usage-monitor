@@ -179,6 +179,10 @@ body {
   font-size: 12px;
 }
 
+.reset.runs-out {
+  color: var(--over);
+}
+
 .links {
   display: flex;
   gap: 6px;
