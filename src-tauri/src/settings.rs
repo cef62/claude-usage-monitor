@@ -248,15 +248,17 @@ impl From<&Settings> for PopoverSettings {
     }
 }
 
+/// Like `load`, but says why the file was not usable, so a reload can keep the current settings
+/// instead of falling back to defaults and saving them over the user's typo.
+pub fn try_load(path: &Path) -> Result<Settings, String> {
+    let raw = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let mut s: Settings = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    s.repair();
+    Ok(s)
+}
+
 pub fn load(path: &Path) -> Settings {
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .map(|mut s: Settings| {
-            s.repair();
-            s
-        })
-        .unwrap_or_default()
+    try_load(path).unwrap_or_default()
 }
 
 pub fn save(path: &Path, s: &Settings) -> std::io::Result<()> {
@@ -286,8 +288,8 @@ pub fn path(app: &AppHandle) -> Option<PathBuf> {
 mod tests {
     use super::write_atomic;
     use super::{
-        format_levels, load, parse_levels, save, PopoverSettings, Settings, KEYS, MAX_POLL_SECS,
-        MIN_POLL_SECS,
+        format_levels, load, parse_levels, save, try_load, PopoverSettings, Settings, KEYS,
+        MAX_POLL_SECS, MIN_POLL_SECS,
     };
     use std::path::PathBuf;
 
@@ -541,6 +543,23 @@ mod tests {
         assert!(s.alert_forecast);
         assert!(s.show_forecast);
         assert!(s.color_percent);
+    }
+
+    #[test]
+    fn try_load_rejects_bad_json_and_repairs_good_json() {
+        let p = temp_path("try-load");
+        assert!(try_load(&p).is_err(), "missing file");
+        std::fs::create_dir_all(p.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&p, r#"{"session_levels": [95, 50,], }"#).expect("write");
+        assert!(try_load(&p).is_err(), "trailing commas");
+        std::fs::write(
+            &p,
+            r#"{"session_levels": [95, 50], "poll_interval_secs": 30}"#,
+        )
+        .expect("write");
+        let s = try_load(&p).expect("valid");
+        assert_eq!(s.session_levels, vec![50, 95]);
+        assert_eq!(s.poll_interval_secs, MIN_POLL_SECS);
     }
 
     #[test]
