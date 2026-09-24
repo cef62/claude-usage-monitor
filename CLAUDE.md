@@ -189,6 +189,10 @@ pnpm site:build         # build the website to site/dist
 - Don't add a "refresh now" that ignores the cooldown.
 - Don't use `localStorage` for anything that must survive; settings live in the Rust side
   (`app_data_dir`).
+- Don't add an in-app Claude login, a pasted `sessionKey`, or anything that reads another app's
+  cookies. Anthropic's terms forbid third-party apps from offering Claude.ai login or storing
+  its credentials or session tokens
+  (https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use).
 
 ## Workflow Standards
 
