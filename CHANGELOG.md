@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.12.0
+
+### Minor Changes
+
+- d747670: Added a pace forecast: the session and weekly cards in the popover now show when you would reach 100% at your recent pace, or where you would land at the reset (Popover → "Pace forecast" hides it), and the new Alerts → "Run-out forecast" notification warns you once per window when a quota would run out well before it resets.
+
 ## 0.11.6
 
 ### Patch Changes
