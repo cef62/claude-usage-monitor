@@ -177,6 +177,12 @@ Settings file (hand-editing is fine; `session_levels` / `weekly_levels` accept a
 - **Requests** — `https://api.anthropic.com/api/oauth/usage` with the same headers Claude Code
   uses, plus one call to `/api/oauth/profile` per login for the plan name.
 - **Data** — the API returns percentages only; there are no token counts anywhere.
+- **No login of its own** — Anthropic's
+  [terms](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use)
+  reserve Claude account logins for Anthropic's own apps and forbid third-party apps from
+  offering one or storing claude.ai credentials, so the app has no sign-in screen. It depends
+  on Claude Code's login and endpoint; Anthropic can restrict that without notice, and the app
+  would then show a login error.
 - **Polling** — one request every 3 minutes by default, never two closer than 2 minutes,
   exponential backoff on `429`, and a full stop on `401` until you log in again.
 
