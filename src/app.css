@@ -87,6 +87,14 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.card .pct.warn {
+  color: var(--warn);
+}
+
+.card .pct.over {
+  color: var(--over);
+}
+
 .bar {
   position: relative;
   height: 8px;
@@ -177,6 +185,10 @@ body {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.reset.forecast {
+  margin-top: 4px;
 }
 
 .reset.runs-out {

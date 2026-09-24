@@ -108,6 +108,10 @@ Also in the popover:
   out first. The pace is the last ~43 minutes (session) or 24 hours (weekly); early in a window
   it is the average since the window started. The line disappears while the numbers are stale;
   **Popover → Pace forecast** turns it off.
+- **Colored percentage** — the session and weekly percentages, in the popover and in the macOS
+  menu bar, turn amber at your lowest alert threshold and red at the highest (a single threshold
+  goes straight to red). On by default; **Popover → Colored percentage** turns it off. The
+  Windows tray icon keeps its pace colors.
 - **Extra usage** card — if your account has pay-as-you-go overage switched on: credits used
   this month, with a bar and percentage when a monthly limit is set.
 - **Footer** — when the numbers were fetched, when the next check is due, and links to the
@@ -156,7 +160,7 @@ Everything is in the right-click menu and persists across restarts:
 | Menu | Options |
 |---|---|
 | **Menu bar** (macOS) / **Tray** (Windows) | Session · Weekly · Glyphs (`◷` / `▦`) · Percent · Remaining time. At least one quota and one of Percent/Remaining stay on. On Windows, Session/Weekly also hide the matching bar in the icon; the other three shape the tooltip. |
-| **Popover** | Time ticks · Elapsed marker · Threshold marks · History line · Pace forecast |
+| **Popover** | Time ticks · Elapsed marker · Threshold marks · History line · Pace forecast · Colored percentage |
 | **Alerts** | Session · Weekly (on/off) · Notify on reset · Run-out forecast · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
 | **Check every** | 3 · 5 · 10 · 15 minutes (the API rate-limits below 2 minutes, so that is the floor) |
 | **Start at login** | registers the app as a login item (macOS: System Settings → General → Login Items, "Allow in the Background"; Windows: `HKCU\…\Run`). Off by default; the check mark always shows what the OS reports. Toggle it from the installed app, not from `pnpm tauri dev`. |

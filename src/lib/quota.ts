@@ -50,6 +50,7 @@ export type PopoverSettings = {
   show_threshold_marks: boolean;
   show_history: boolean;
   show_forecast: boolean;
+  color_percent: boolean;
 };
 
 export const DEFAULT_POPOVER_SETTINGS: PopoverSettings = {
@@ -60,4 +61,5 @@ export const DEFAULT_POPOVER_SETTINGS: PopoverSettings = {
   show_threshold_marks: true,
   show_history: true,
   show_forecast: true,
+  color_percent: true,
 };

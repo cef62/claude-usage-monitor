@@ -5,6 +5,7 @@ import {
   countdown,
   elapsedPct,
   forecastText,
+  levelColor,
   markClass,
   money,
   relative,
@@ -74,6 +75,22 @@ describe('markClass', () => {
     expect(markClass(95, [80, 95])).toBe('over');
     expect(markClass(80, [80, 95])).toBe('warn');
     expect(markClass(95, [95])).toBe('over');
+  });
+});
+
+describe('levelColor', () => {
+  it('turns amber at the lowest level and red at the highest', () => {
+    expect(levelColor(79, [80, 95])).toBeNull();
+    expect(levelColor(80, [80, 95])).toBe('warn');
+    expect(levelColor(94.6, [80, 95])).toBe('warn');
+    expect(levelColor(95, [80, 95])).toBe('over');
+    expect(levelColor(130, [80, 95])).toBe('over');
+  });
+
+  it('goes straight to red with a single level and stays plain with none', () => {
+    expect(levelColor(90, [95])).toBeNull();
+    expect(levelColor(95, [95])).toBe('over');
+    expect(levelColor(99, [])).toBeNull();
   });
 });
 
