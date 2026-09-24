@@ -1,5 +1,11 @@
 # claude-usage-monitor
 
+## 0.14.0
+
+### Minor Changes
+
+- b49d4a9: **Help → Reload settings** applies hand edits to `settings.json` without restarting the app. A file that does not parse is left untouched and the current settings stay; a notification says what is wrong.
+
 ## 0.13.0
 
 ### Minor Changes
