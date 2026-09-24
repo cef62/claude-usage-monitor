@@ -40,7 +40,8 @@ jobs:
 
       - run: pnpm site:build
 
-      - run: pnpm tauri build --bundles app --target aarch64-apple-darwin
+      # Fork PRs get no secrets: build unsigned so the compile and bundle steps still run.
+      - run: pnpm tauri build --bundles app --target aarch64-apple-darwin ${{ secrets.TAURI_SIGNING_PRIVATE_KEY == '' && '--no-sign' || '' }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -70,7 +71,8 @@ jobs:
 
       - run: pnpm verify
 
-      - run: pnpm tauri build --bundles nsis --target x86_64-pc-windows-msvc
+      # Fork PRs get no secrets: build unsigned so the compile and bundle steps still run.
+      - run: pnpm tauri build --bundles nsis --target x86_64-pc-windows-msvc ${{ secrets.TAURI_SIGNING_PRIVATE_KEY == '' && '--no-sign' || '' }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
