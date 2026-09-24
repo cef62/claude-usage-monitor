@@ -18,6 +18,12 @@ serde_json = "1"
 tauri-plugin-autostart = "2"
 tauri-plugin-updater = "2.11"
 
+# Coloured menu bar title (NSAttributedString). Same versions tray-icon already pulls in.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSAttributedString", "NSString", "NSRange"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSColor", "NSAttributedString", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder"] }
+
 [profile.release]
 opt-level = "s"
 lto = true

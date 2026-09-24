@@ -9,6 +9,7 @@ import {
   elapsedPct,
   extraPct,
   forecastText,
+  levelColor,
   markClass,
   money,
   relative,
@@ -90,12 +91,13 @@ function QuotaCard({
   const tickCount = q.period_secs === SESSION_SECS ? 5 : 7;
   const ticks = Array.from({ length: tickCount - 1 }, (_, i) => ((i + 1) / tickCount) * 100);
   const levels = levelsFor(q, settings);
+  const pctColor = settings.color_percent ? levelColor(q.percent, levels) : null;
   const pace = settings.show_forecast && forecast ? forecastText(forecast, now, q.resets_at) : null;
   return (
     <section className={`card ${color}`}>
       <header>
         <span className="label">{q.label}</span>
-        <span className="pct">{Math.round(q.percent)}%</span>
+        <span className={pctColor ? `pct ${pctColor}` : 'pct'}>{Math.round(q.percent)}%</span>
       </header>
       <div className="bar">
         <div className="fill" style={{ width: `${Math.min(100, q.percent)}%` }} />
@@ -122,7 +124,11 @@ function QuotaCard({
       <p className="reset">
         Resets in {countdown(q.resets_at - now)} · {clock(q.resets_at, now)}
       </p>
-      {pace && <p className={forecast?.kind === 'runs_out' ? 'reset runs-out' : 'reset'}>{pace}</p>}
+      {pace && (
+        <p className={forecast?.kind === 'runs_out' ? 'reset forecast runs-out' : 'reset forecast'}>
+          {pace}
+        </p>
+      )}
     </section>
   );
 }

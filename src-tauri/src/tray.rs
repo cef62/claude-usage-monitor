@@ -52,12 +52,13 @@ const ALERT_LABELS: [(&str, &str); 4] = [
     ("alert_forecast", "Run-out forecast"),
 ];
 
-const POPOVER_LABELS: [(&str, &str); 5] = [
+const POPOVER_LABELS: [(&str, &str); 6] = [
     ("show_time_ticks", "Time ticks"),
     ("show_elapsed_marker", "Elapsed marker"),
     ("show_threshold_marks", "Threshold marks"),
     ("show_history", "History line"),
     ("show_forecast", "Pace forecast"),
+    ("color_percent", "Colored percentage"),
 ];
 
 #[derive(Debug, PartialEq)]
@@ -247,6 +248,90 @@ pub fn title(s: &Snapshot, now: i64, settings: &Settings) -> String {
         Status::AuthExpired => status_text("! login", settings),
         Status::Error { .. } => status_text("! err", settings),
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Tint {
+    Warn,
+    Over,
+}
+
+/// Same rule as `levelColor` in `src/lib/format.ts`, so the title and the popover agree.
+pub fn level_tint(percent: f64, levels: &[u8]) -> Option<Tint> {
+    let top = f64::from(*levels.iter().max()?);
+    let low = f64::from(*levels.iter().min()?);
+    if percent >= top {
+        Some(Tint::Over)
+    } else if percent >= low {
+        Some(Tint::Warn)
+    } else {
+        None
+    }
+}
+
+/// `(start, len, tint)` in UTF-16 units (what `NSRange` counts) for each `NN%` in `title` that
+/// crossed an alert level. Halves appear in title order, so each search starts after the last.
+pub fn percent_tints(title: &str, s: &Snapshot, settings: &Settings) -> Vec<(usize, usize, Tint)> {
+    let live = matches!(s.status, Status::Ok | Status::RateLimited { .. });
+    if !(live && settings.color_percent && settings.percent) {
+        return Vec::new();
+    }
+    let keys = [("session", settings.session), ("weekly", settings.weekly)];
+    let mut cursor = 0;
+    let mut tints = Vec::new();
+    for (key, shown) in keys {
+        let Some(q) = s.quotas.iter().find(|q| q.key == key).filter(|_| shown) else {
+            continue;
+        };
+        let text = format!("{}%", q.percent.round() as i64);
+        let Some(pos) = title[cursor..].find(&text).map(|p| p + cursor) else {
+            continue;
+        };
+        cursor = pos + text.len();
+        if let Some(tint) = level_tint(q.percent, settings.levels(key)) {
+            let start = title[..pos].encode_utf16().count();
+            tints.push((start, text.encode_utf16().count(), tint));
+        }
+    }
+    tints
+}
+
+/// Plain `set_title` cannot carry colour; re-set the button title as an attributed string.
+/// `with_inner_tray_icon` runs on the main thread, which AppKit requires.
+#[cfg(target_os = "macos")]
+fn tint_title(tray: &tauri::tray::TrayIcon, text: String, tints: Vec<(usize, usize, Tint)>) {
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSColor, NSForegroundColorAttributeName};
+    use objc2_foundation::{NSMutableAttributedString, NSRange, NSString};
+
+    let _ = tray.with_inner_tray_icon(move |inner| {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let Some(button) = inner.ns_status_item().and_then(|item| item.button(mtm)) else {
+            return;
+        };
+        let attributed = NSMutableAttributedString::from_nsstring(&NSString::from_str(&text));
+        for (start, len, tint) in tints {
+            let color: Retained<NSColor> = match tint {
+                Tint::Warn => NSColor::systemOrangeColor(),
+                Tint::Over => NSColor::systemRedColor(),
+            };
+            let value: &AnyObject = &color;
+            // SAFETY: NSForegroundColorAttributeName takes an NSColor; the range comes from
+            // `percent_tints` over this same string, so it is in bounds.
+            unsafe {
+                attributed.addAttribute_value_range(
+                    NSForegroundColorAttributeName,
+                    value,
+                    NSRange::new(start, len),
+                );
+            }
+        }
+        button.setAttributedTitle(&attributed);
+    });
 }
 
 /// A monitor's area in logical pixels, with its global origin: the tray rect is in global screen
@@ -676,7 +761,16 @@ pub fn refresh(app: &AppHandle, s: &Snapshot) {
     };
     let text = title(s, poll::now(), &settings);
     #[cfg(target_os = "macos")]
-    let _ = tray.set_title(Some(text));
+    {
+        let tints = percent_tints(&text, s, &settings);
+        if tints.is_empty() {
+            let _ = tray.set_title(Some(text));
+        } else {
+            // Keep tray-icon's own copy of the title current, then paint over it.
+            let _ = tray.set_title(Some(text.clone()));
+            tint_title(&tray, text, tints);
+        }
+    }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = tray.set_tooltip(Some(text.trim()));
@@ -744,6 +838,9 @@ mod tests {
         assert!(POPOVER_LABELS
             .iter()
             .any(|(k, l)| *k == "show_forecast" && *l == "Pace forecast"));
+        assert!(POPOVER_LABELS
+            .iter()
+            .any(|(k, l)| *k == "color_percent" && *l == "Colored percentage"));
         assert!(POPOVER_LABELS.iter().all(|(k, _)| KEYS.contains(k)));
     }
 
@@ -873,6 +970,58 @@ mod tests {
             title(&s, NOW, &with(&["alert_session"])),
             " ◷ 96% ↻2h13m  ·  ▦ 64% ↻3d4h"
         );
+    }
+
+    #[test]
+    fn level_tint_matches_the_popover_rule() {
+        assert_eq!(level_tint(79.0, &[80, 95]), None);
+        assert_eq!(level_tint(80.0, &[80, 95]), Some(Tint::Warn));
+        assert_eq!(level_tint(95.0, &[80, 95]), Some(Tint::Over));
+        assert_eq!(level_tint(90.0, &[95]), None);
+        assert_eq!(level_tint(95.0, &[95]), Some(Tint::Over));
+        assert_eq!(level_tint(99.0, &[]), None);
+    }
+
+    #[test]
+    fn percent_tints_cover_each_coloured_percentage_in_utf16() {
+        let s = snapshot(
+            Status::Ok,
+            vec![
+                quota("session", 86.0, 2 * 3600 + 13 * 60, SESSION_SECS),
+                quota("weekly", 96.0, 3 * 86400, WEEKLY_SECS),
+            ],
+        );
+        let settings = with(&["alert_session", "alert_weekly"]);
+        let t = title(&s, NOW, &settings);
+        assert_eq!(t, " ◷ 86% ↻2h13m  ·  ▦ 96% ↻3d0h");
+        // " ◷ " is 3 UTF-16 units; the weekly "96%" follows "86% ↻2h13m  ·  ▦ ".
+        assert_eq!(
+            percent_tints(&t, &s, &settings),
+            vec![(3, 3, Tint::Warn), (20, 3, Tint::Over)]
+        );
+    }
+
+    #[test]
+    fn percent_tints_skip_calm_hidden_and_disabled() {
+        let s = snapshot(
+            Status::Ok,
+            vec![
+                quota("session", 96.0, 600, SESSION_SECS),
+                quota("weekly", 6.0, 3 * 86400, WEEKLY_SECS),
+            ],
+        );
+        let settings = Settings::default();
+        let t = title(&s, NOW, &settings);
+        // Weekly 6% must not match inside the session's "96%".
+        assert_eq!(percent_tints(&t, &s, &settings).len(), 1);
+        for off in [&["color_percent"][..], &["percent"], &["session"]] {
+            let settings = with(off);
+            let t = title(&s, NOW, &settings);
+            assert!(percent_tints(&t, &s, &settings).is_empty(), "{off:?}");
+        }
+        let err = snapshot(Status::AuthExpired, s.quotas.clone());
+        let t = title(&err, NOW, &settings);
+        assert!(percent_tints(&t, &err, &settings).is_empty());
     }
 
     #[test]

@@ -24,6 +24,7 @@ pub struct Settings {
     pub show_threshold_marks: bool,
     pub show_history: bool,
     pub show_forecast: bool,
+    pub color_percent: bool,
     pub session_levels: Vec<u8>,
     pub weekly_levels: Vec<u8>,
     pub poll_interval_secs: u64,
@@ -47,6 +48,7 @@ impl Default for Settings {
             show_threshold_marks: true,
             show_history: true,
             show_forecast: true,
+            color_percent: true,
             session_levels: vec![80, 95],
             weekly_levels: vec![95],
             poll_interval_secs: 180,
@@ -54,7 +56,7 @@ impl Default for Settings {
     }
 }
 
-pub const KEYS: [&str; 15] = [
+pub const KEYS: [&str; 16] = [
     "session",
     "weekly",
     "glyph",
@@ -70,6 +72,7 @@ pub const KEYS: [&str; 15] = [
     "show_threshold_marks",
     "show_history",
     "show_forecast",
+    "color_percent",
 ];
 pub const MIN_POLL_SECS: u64 = 120;
 pub const MAX_POLL_SECS: u64 = 900;
@@ -95,6 +98,7 @@ impl Settings {
             "show_threshold_marks" => self.show_threshold_marks,
             "show_history" => self.show_history,
             "show_forecast" => self.show_forecast,
+            "color_percent" => self.color_percent,
             _ => false,
         }
     }
@@ -116,7 +120,8 @@ impl Settings {
             | "show_elapsed_marker"
             | "show_threshold_marks"
             | "show_history"
-            | "show_forecast" => true,
+            | "show_forecast"
+            | "color_percent" => true,
             _ => return false,
         };
         if self.get(key) && !partner_on {
@@ -138,6 +143,7 @@ impl Settings {
             "show_threshold_marks" => self.show_threshold_marks = !self.show_threshold_marks,
             "show_history" => self.show_history = !self.show_history,
             "show_forecast" => self.show_forecast = !self.show_forecast,
+            "color_percent" => self.color_percent = !self.color_percent,
             _ => return false,
         }
         true
@@ -224,6 +230,7 @@ pub struct PopoverSettings {
     pub show_threshold_marks: bool,
     pub show_history: bool,
     pub show_forecast: bool,
+    pub color_percent: bool,
 }
 
 impl From<&Settings> for PopoverSettings {
@@ -236,6 +243,7 @@ impl From<&Settings> for PopoverSettings {
             show_threshold_marks: s.show_threshold_marks,
             show_history: s.show_history,
             show_forecast: s.show_forecast,
+            color_percent: s.color_percent,
         }
     }
 }
@@ -388,6 +396,17 @@ mod tests {
     }
 
     #[test]
+    fn color_percent_defaults_on_toggles_freely_and_reaches_the_popover() {
+        let mut s = Settings::default();
+        assert!(s.color_percent);
+        assert!(PopoverSettings::from(&s).color_percent);
+        assert!(s.toggle("color_percent"));
+        assert!(!s.get("color_percent"));
+        let json = serde_json::to_value(PopoverSettings::from(&s)).expect("serializes");
+        assert_eq!(json["color_percent"], serde_json::json!(false));
+    }
+
+    #[test]
     fn show_forecast_defaults_on_toggles_freely_and_reaches_the_popover() {
         let mut s = Settings::default();
         assert!(s.show_forecast);
@@ -401,7 +420,7 @@ mod tests {
 
     #[test]
     fn alert_keys_toggle_freely() {
-        assert_eq!(KEYS.len(), 15);
+        assert_eq!(KEYS.len(), 16);
         let mut s = Settings::default();
         assert!(s.alert_session && s.alert_weekly && s.alert_reset);
         assert!(s.auto_update_check);
@@ -437,7 +456,7 @@ mod tests {
     #[test]
     fn new_fields_default() {
         let s = Settings::default();
-        assert_eq!(KEYS.len(), 15);
+        assert_eq!(KEYS.len(), 16);
         assert!(s.show_time_ticks && s.show_elapsed_marker && s.show_threshold_marks);
         assert_eq!(s.session_levels, vec![80, 95]);
         assert_eq!(s.weekly_levels, vec![95]);
@@ -521,6 +540,7 @@ mod tests {
         assert_eq!(s.session_levels, vec![80, 95]);
         assert!(s.alert_forecast);
         assert!(s.show_forecast);
+        assert!(s.color_percent);
     }
 
     #[test]

@@ -42,6 +42,14 @@ export function markClass(level: number, levels: number[]): BarColor {
   return level >= Math.max(...levels) ? 'over' : 'warn';
 }
 
+/** Text colour for a percentage against the user's alert levels: red from the top level up,
+ * amber from the lowest; a single level goes straight to red, like its threshold mark. */
+export function levelColor(percent: number, levels: number[]): BarColor | null {
+  if (levels.length === 0) return null;
+  if (percent >= Math.max(...levels)) return 'over';
+  return percent >= Math.min(...levels) ? 'warn' : null;
+}
+
 export function relative(secs: number): string {
   if (secs < 5) return 'just now';
   if (secs < 60) return `${Math.floor(secs)}s ago`;
