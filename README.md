@@ -165,10 +165,11 @@ Everything is in the right-click menu and persists across restarts:
 | **Check every** | 3 · 5 · 10 · 15 minutes (the API rate-limits below 2 minutes, so that is the floor) |
 | **Start at login** | registers the app as a login item (macOS: System Settings → General → Login Items, "Allow in the Background"; Windows: `HKCU\…\Run`). Off by default; the check mark always shows what the OS reports. Toggle it from the installed app, not from `pnpm tauri dev`. |
 | **Help → Check for updates automatically** | daily background check on/off (default on); **Check for updates…** always works |
+| **Help → Reload settings** | applies hand edits to `settings.json` without restarting. A file that does not parse is left alone and the current settings stay; a notification says what is wrong. |
 | **Help → Open log** | reveals `claude-usage-monitor.log`: poll results, alerts, settings changes — never your token. Rotates at 1 MB. Attach it when reporting a problem. |
 
 Settings file (hand-editing is fine; `session_levels` / `weekly_levels` accept any 1–100 values,
-`poll_interval_secs` is clamped to 120–900):
+`poll_interval_secs` is clamped to 120–900). Save it, then **Help → Reload settings**:
 
 - macOS: `~/Library/Application Support/com.matteo.claude-usage-monitor/settings.json`
 - Windows: `%APPDATA%\com.matteo.claude-usage-monitor\settings.json`

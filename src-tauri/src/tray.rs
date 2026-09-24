@@ -70,6 +70,7 @@ pub enum MenuAction {
     Interval(u64),
     TestNotification,
     OpenLog,
+    ReloadSettings,
     Autostart,
     CheckUpdates,
     InstallUpdate,
@@ -95,6 +96,7 @@ pub fn parse_menu_id(id: &str) -> Option<MenuAction> {
         "quit" => return Some(MenuAction::Quit),
         "test-notification" => return Some(MenuAction::TestNotification),
         "open-log" => return Some(MenuAction::OpenLog),
+        "reload-settings" => return Some(MenuAction::ReloadSettings),
         "autostart" => return Some(MenuAction::Autostart),
         "check-updates" => return Some(MenuAction::CheckUpdates),
         "install-update" => return Some(MenuAction::InstallUpdate),
@@ -452,6 +454,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     )?;
     items.insert("autostart".to_string(), autostart.clone());
     let open_log_item = MenuItemBuilder::with_id("open-log", "Open log").build(app)?;
+    let reload_item = MenuItemBuilder::with_id("reload-settings", "Reload settings").build(app)?;
     let check_updates =
         MenuItemBuilder::with_id("check-updates", "Check for updates…").build(app)?;
     let install_update = MenuItemBuilder::with_id("install-update", "Install update…")
@@ -470,6 +473,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let about = MenuItemBuilder::with_id("about", "About…").build(app)?;
     let help = SubmenuBuilder::new(app, "Help")
         .item(&open_log_item)
+        .item(&reload_item)
         .separator()
         .item(&auto_check)
         .item(&check_updates)
@@ -507,6 +511,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
             Some(MenuAction::Interval(secs)) => on_interval_chosen(app, secs),
             Some(MenuAction::TestNotification) => send_test_notification(app),
             Some(MenuAction::OpenLog) => open_log(app),
+            Some(MenuAction::ReloadSettings) => reload_settings(app),
             Some(MenuAction::Autostart) => on_autostart_toggled(app),
             Some(MenuAction::CheckUpdates) => {
                 let app = app.clone();
@@ -649,6 +654,29 @@ fn on_autostart_toggled(app: &AppHandle) {
         }
     }
     log::write(app, &format!("settings autostart={enabled}"));
+}
+
+/// Picks up hand edits to settings.json. A file that does not parse changes nothing and is not
+/// overwritten; the error goes to a notification and the log.
+fn reload_settings(app: &AppHandle) {
+    let Some(path) = settings::path(app) else {
+        return;
+    };
+    match settings::try_load(&path) {
+        Ok(loaded) => {
+            *lock_settings(app) = loaded.clone();
+            after_settings_change(app, &loaded, Some("settings reloaded from settings.json"));
+        }
+        Err(e) => {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Claude usage: settings not reloaded")
+                .body(format!("settings.json: {e}"))
+                .show();
+            log::write(app, &format!("settings reload failed: {e}"));
+        }
+    }
 }
 
 fn open_log(app: &AppHandle) {
@@ -1055,6 +1083,10 @@ mod tests {
             Some(MenuAction::InstallUpdate)
         ));
         assert!(matches!(parse_menu_id("about"), Some(MenuAction::About)));
+        assert!(matches!(
+            parse_menu_id("reload-settings"),
+            Some(MenuAction::ReloadSettings)
+        ));
         assert!(matches!(parse_menu_id("set:glyph"), Some(MenuAction::Toggle(k)) if k == "glyph"));
         assert!(matches!(
             parse_menu_id("levels:weekly:80,95"),
