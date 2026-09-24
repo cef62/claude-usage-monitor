@@ -56,6 +56,10 @@ jobs:
     needs: create-release
     strategy:
       fail-fast: false
+      # tauri-action merges each platform into the release's latest.json by download → edit →
+      # re-upload. Two jobs finishing together lose one platform (0.14.0 shipped Windows-only),
+      # so build one at a time.
+      max-parallel: 1
       matrix:
         include:
           - os: macos-latest
@@ -108,4 +112,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag || github.ref_name }}
-        run: gh release edit "$TAG" --draft=false
+        run: |
+          # Published releases are immutable: a feed missing a platform must never go out.
+          gh release download "$TAG" -p latest.json -O - \
+            | jq -e '.platforms | has("darwin-aarch64") and has("windows-x86_64")'
+          gh release edit "$TAG" --draft=false

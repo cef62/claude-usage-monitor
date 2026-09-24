@@ -164,8 +164,9 @@ pnpm site:build         # build the website to site/dist
 - Workflows: `ci.yml` (verify + build on PRs and `main`), `release.yml` (Changesets action:
   opens the Version Packages PR; on its merge runs `changeset git-tag`, pushes the tag and
   dispatches `build-release.yml`), `build-release.yml` (dispatched by `release.yml`, or any
-  manual `v*` tag push: `tauri-action` builds `aarch64-apple-darwin` and publishes the GitHub
-  Release, then a second job adds the Windows x64 NSIS installer), `pages.yml` (deploys `site/`
+  manual `v*` tag push: creates a draft Release, `tauri-action` builds `aarch64-apple-darwin`
+  then the Windows x64 NSIS installer — one at a time, `max-parallel: 1`, because parallel jobs
+  race on `latest.json` — and publishes only if `latest.json` lists both platforms), `pages.yml` (deploys `site/`
   to GitHub Pages on push to `main` when site/README/CHANGELOG/package.json change, so every
   Version Packages merge redeploys the site with the new version and notes; one-time repo
   setting: Pages source must be "GitHub Actions").
