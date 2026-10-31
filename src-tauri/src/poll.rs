@@ -218,6 +218,8 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
                                 last_success = Some(now);
                                 let extra = usage::extra_usage(&body);
                                 // One profile call per token: it only carries the plan name.
+                                // `Some(plan)` means it was attempted for this token, so even a
+                                // failed call replaces the previous account's plan.
                                 let plan = if needs_profile(profile_for, creds.fingerprint) {
                                     match usage::fetch_profile(
                                         &client,
@@ -227,16 +229,29 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
                                     ) {
                                         Ok(profile) => {
                                             profile_for = Some(creds.fingerprint);
-                                            usage::plan_label(&profile)
+                                            if let (Some(path), Some(tier)) =
+                                                (&log_path, usage::unknown_tier(&profile))
+                                            {
+                                                let _ = log::append(
+                                                    path,
+                                                    &format!("profile tier {tier}"),
+                                                );
+                                            }
+                                            Some(usage::plan_label(&profile))
                                         }
                                         Err(e) => {
+                                            // Only a network blip is worth retrying; a 4xx/5xx
+                                            // would be re-hit every poll on a ban-happy API.
+                                            if !matches!(e, FetchError::Network(_)) {
+                                                profile_for = Some(creds.fingerprint);
+                                            }
                                             if let Some(path) = &log_path {
                                                 let _ = log::append(
                                                     path,
                                                     &format!("profile failed {e:?}"),
                                                 );
                                             }
-                                            None
+                                            Some(None)
                                         }
                                     }
                                 } else {
@@ -256,7 +271,7 @@ pub fn run<F: Fn(&Snapshot) + Send + 'static>(
                                 s.history = popover_history;
                                 s.forecast = forecasts;
                                 s.extra = extra;
-                                if plan.is_some() {
+                                if let Some(plan) = plan {
                                     s.plan = plan;
                                 }
                                 s.fetched_at = Some(now);

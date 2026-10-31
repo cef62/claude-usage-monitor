@@ -96,7 +96,11 @@ keychain). React owns rendering only.** The frontend never sees the OAuth token.
   poll; a missing/partial blob means "no token", never a crash.
 - Quotas: prefer `limits[]` (`kind: session | weekly_all | weekly_scoped`, per-model via
   `scope.model.display_name`), fall back to flat `five_hour` / `seven_day` / `seven_day_*`.
-  Drop entries with null utilization or no `resets_at`. Utilization can exceed 100; show the
+  Drop entries with null utilization or no `resets_at`. `session` can be absent: verified Ultra
+  accounts (ex Max 20x, renamed 2026-10-30) have no 5-hour window, so `tray::shown_keys` drops
+  the session half from the title/icon and the popover simply has no card. Plan labels:
+  `default_claude_max_5x` → Max, `default_claude_max_20x` → Ultra; unknown tiers are logged as
+  `profile tier <x>`. Utilization can exceed 100; show the
   raw number, clamp only the bar fill. `resets_at` has sub-second jitter — never compare for
   equality.
 - Rate limits (learned by the prior art through pain): base poll 180s (user-configurable
