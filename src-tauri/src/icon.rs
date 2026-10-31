@@ -4,6 +4,7 @@
 use crate::alerts;
 use crate::poll::{Snapshot, Status};
 use crate::settings::Settings;
+use crate::tray;
 use crate::usage::Quota;
 
 /// Rendered size; Windows scales it to 16×16 at 100 % DPI.
@@ -75,14 +76,15 @@ pub fn render(s: &Snapshot, settings: &Settings, now: i64) -> Vec<u8> {
     let mut canvas = Canvas::new();
     let live = matches!(s.status, Status::Ok | Status::RateLimited { .. });
     let find = |key: &str| s.quotas.iter().find(|q| q.key == key);
-    // Both halves off is impossible: `Settings::toggle` keeps at least one on.
-    match (settings.session, settings.weekly) {
-        (true, true) => {
-            bar(&mut canvas, TOP_Y, find("session"), now, live);
-            bar(&mut canvas, BOTTOM_Y, find("weekly"), now, live);
+    // Same keys as the title, so an account without a session quota gets one centred bar.
+    match tray::shown_keys(s, settings)[..] {
+        [top, bottom] => {
+            bar(&mut canvas, TOP_Y, find(top), now, live);
+            bar(&mut canvas, BOTTOM_Y, find(bottom), now, live);
         }
-        (true, false) => bar(&mut canvas, SINGLE_Y, find("session"), now, live),
-        (false, _) => bar(&mut canvas, SINGLE_Y, find("weekly"), now, live),
+        [only] => bar(&mut canvas, SINGLE_Y, find(only), now, live),
+        // Unreachable: `Settings::toggle` keeps at least one half on.
+        _ => {}
     }
     if matches!(s.status, Status::NoToken | Status::AuthExpired) {
         canvas.fill(SQUARE_XY, SQUARE_XY, SQUARE_SIZE, SQUARE_SIZE, OVER);
@@ -202,15 +204,24 @@ mod tests {
     }
 
     #[test]
-    fn missing_quota_draws_the_track_only() {
-        let only_session = vec![quota("session", 48.4, 2 * 3600, SESSION_SECS)];
+    fn no_data_draws_both_tracks() {
+        let buf = render(&snapshot(Status::Ok, vec![]), &Settings::default(), NOW);
+        assert_eq!(px(&buf, 3, 8), TRACK);
+        assert_eq!(px(&buf, 28, 20), TRACK);
+    }
+
+    #[test]
+    fn weekly_only_data_centres_the_weekly_bar() {
+        let weekly_only = vec![quota("weekly", 40.0, 3 * 86400, WEEKLY_SECS)];
         let buf = render(
-            &snapshot(Status::Ok, only_session),
+            &snapshot(Status::Ok, weekly_only),
             &Settings::default(),
             NOW,
         );
-        assert_eq!(px(&buf, 3, 20), TRACK);
-        assert_eq!(px(&buf, 28, 20), TRACK);
+        assert_eq!(px(&buf, 12, 15), OK);
+        assert_eq!(px(&buf, 13, 15), TRACK);
+        assert_eq!(px(&buf, 3, 8), [0, 0, 0, 0]);
+        assert_eq!(px(&buf, 3, 20), [0, 0, 0, 0]);
     }
 
     #[test]
@@ -295,7 +306,8 @@ mod tests {
     fn percent_over_100_clamps_the_fill() {
         let quotas = vec![quota("session", 130.0, 3600, SESSION_SECS)];
         let buf = render(&snapshot(Status::Ok, quotas), &Settings::default(), NOW);
-        assert_eq!(px(&buf, 28, 8), OVER);
-        assert_eq!(px(&buf, 29, 8), [0, 0, 0, 0]);
+        // Session-only data draws the single centred bar.
+        assert_eq!(px(&buf, 28, 15), OVER);
+        assert_eq!(px(&buf, 29, 15), [0, 0, 0, 0]);
     }
 }

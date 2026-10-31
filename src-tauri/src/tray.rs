@@ -227,15 +227,38 @@ fn status_text(text: &str, settings: &Settings) -> String {
     }
 }
 
+/// The enabled halves whose quota the account has. Verified Ultra accounts have no 5-hour
+/// session, so a dead `◷ —` would sit there forever; when nothing enabled exists, show what
+/// does, and before the first fetch keep the enabled placeholders.
+pub fn shown_keys(s: &Snapshot, settings: &Settings) -> Vec<&'static str> {
+    let has = |key: &str| s.quotas.iter().any(|q| q.key == key);
+    let enabled: Vec<&'static str> = [("session", settings.session), ("weekly", settings.weekly)]
+        .into_iter()
+        .filter_map(|(key, on)| on.then_some(key))
+        .collect();
+    let present: Vec<&'static str> = enabled.iter().copied().filter(|k| has(k)).collect();
+    if !present.is_empty() {
+        return present;
+    }
+    match ["session", "weekly"].into_iter().find(|k| has(k)) {
+        Some(key) => vec![key],
+        None => enabled,
+    }
+}
+
 pub fn title(s: &Snapshot, now: i64, settings: &Settings) -> String {
     let numbers = || {
-        let mut halves = Vec::with_capacity(2);
-        if settings.session {
-            halves.push(half(s, "session", SESSION_GLYPH, now, settings));
-        }
-        if settings.weekly {
-            halves.push(half(s, "weekly", WEEKLY_GLYPH, now, settings));
-        }
+        let halves: Vec<String> = shown_keys(s, settings)
+            .into_iter()
+            .map(|key| {
+                let glyph = if key == "session" {
+                    SESSION_GLYPH
+                } else {
+                    WEEKLY_GLYPH
+                };
+                half(s, key, glyph, now, settings)
+            })
+            .collect();
         let warn = if alerts::marker(&s.quotas, settings) {
             "⚠ "
         } else {
@@ -278,11 +301,10 @@ pub fn percent_tints(title: &str, s: &Snapshot, settings: &Settings) -> Vec<(usi
     if !(live && settings.color_percent && settings.percent) {
         return Vec::new();
     }
-    let keys = [("session", settings.session), ("weekly", settings.weekly)];
     let mut cursor = 0;
     let mut tints = Vec::new();
-    for (key, shown) in keys {
-        let Some(q) = s.quotas.iter().find(|q| q.key == key).filter(|_| shown) else {
+    for key in shown_keys(s, settings) {
+        let Some(q) = s.quotas.iter().find(|q| q.key == key) else {
             continue;
         };
         let text = format!("{}%", q.percent.round() as i64);
@@ -926,11 +948,74 @@ mod tests {
         );
     }
 
+    fn weekly_only() -> Vec<Quota> {
+        vec![
+            quota("weekly", 96.0, 3 * 86400 + 4 * 3600 + 20 * 60, WEEKLY_SECS),
+            quota("weekly:fable", 12.0, 3 * 86400, WEEKLY_SECS),
+        ]
+    }
+
     #[test]
-    fn title_missing_quota_shows_dash() {
-        let s = snapshot(Status::Ok, vec![quota("session", 48.0, 600, SESSION_SECS)]);
-        assert_eq!(title(&s, NOW, &Settings::default()), " ◷ 48% ↻10m  ·  ▦ —");
-        assert_eq!(title(&s, NOW, &with(&["glyph"])), " 48% ↻10m  ·  —");
+    fn title_hides_a_quota_the_account_does_not_have() {
+        let s = snapshot(Status::Ok, weekly_only());
+        let quiet = with(&["alert_weekly"]);
+        assert_eq!(title(&s, NOW, &quiet), " ▦ 96% ↻3d4h");
+        assert_eq!(
+            title(&s, NOW, &with(&["glyph", "alert_weekly"])),
+            " 96% ↻3d4h"
+        );
+        let session = snapshot(Status::Ok, vec![quota("session", 48.0, 600, SESSION_SECS)]);
+        assert_eq!(title(&session, NOW, &Settings::default()), " ◷ 48% ↻10m");
+    }
+
+    #[test]
+    fn title_falls_back_to_the_quota_that_exists() {
+        // Only the session half is enabled, but an Ultra account has no session quota.
+        let s = snapshot(Status::Ok, weekly_only());
+        assert_eq!(
+            title(&s, NOW, &with(&["weekly", "alert_weekly"])),
+            " ▦ 96% ↻3d4h"
+        );
+    }
+
+    #[test]
+    fn title_before_any_data_shows_dashes() {
+        let s = snapshot(Status::Ok, vec![]);
+        assert_eq!(title(&s, NOW, &Settings::default()), " ◷ —  ·  ▦ —");
+        assert_eq!(title(&s, NOW, &with(&["weekly"])), " ◷ —");
+    }
+
+    #[test]
+    fn shown_keys_follow_settings_then_data() {
+        let d = Settings::default();
+        assert_eq!(
+            shown_keys(&snapshot(Status::Ok, both()), &d),
+            ["session", "weekly"]
+        );
+        assert_eq!(
+            shown_keys(&snapshot(Status::Ok, weekly_only()), &d),
+            ["weekly"]
+        );
+        assert_eq!(
+            shown_keys(&snapshot(Status::Ok, weekly_only()), &with(&["weekly"])),
+            ["weekly"]
+        );
+        assert_eq!(
+            shown_keys(&snapshot(Status::Ok, both()), &with(&["weekly"])),
+            ["session"]
+        );
+        assert_eq!(
+            shown_keys(&snapshot(Status::Ok, vec![]), &d),
+            ["session", "weekly"]
+        );
+    }
+
+    #[test]
+    fn percent_tints_follow_the_weekly_only_title() {
+        let s = snapshot(Status::Ok, weekly_only());
+        let settings = with(&["weekly", "alert_weekly"]);
+        let t = title(&s, NOW, &settings);
+        assert_eq!(percent_tints(&t, &s, &settings), vec![(3, 3, Tint::Over)]);
     }
 
     #[test]

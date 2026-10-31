@@ -312,12 +312,11 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 pub fn plan_label(profile: &Value) -> Option<String> {
     let org = profile.get("organization")?;
     let tier = org.get("rate_limit_tier").and_then(Value::as_str);
-    let known = match tier {
-        Some("default_claude_max_5x") => Some("Max 5x"),
-        Some("default_claude_max_20x") => Some("Max 20x"),
-        Some("default_claude_pro") => Some("Pro"),
-        _ => None,
-    };
+    // shortcut: any tier mentioning "ultra" is guessed to be Ultra, add the exact string to
+    // `known_tier` once a user's log shows it.
+    let known = tier
+        .and_then(known_tier)
+        .or_else(|| tier.filter(|t| t.contains("ultra")).map(|_| "Ultra"));
     if let Some(k) = known {
         return Some(k.to_string());
     }
@@ -334,6 +333,25 @@ pub fn plan_label(profile: &Value) -> Option<String> {
         })
         .collect();
     Some(words.join(" "))
+}
+
+/// Max 5x and Max 20x were renamed Max and Ultra on 2026-10-30; the tier strings were not.
+fn known_tier(tier: &str) -> Option<&'static str> {
+    match tier {
+        "default_claude_max_5x" => Some("Max"),
+        "default_claude_max_20x" => Some("Ultra"),
+        "default_claude_pro" => Some("Pro"),
+        _ => None,
+    }
+}
+
+/// A `rate_limit_tier` that `known_tier` does not map, so it can be logged and added later.
+pub fn unknown_tier(profile: &Value) -> Option<&str> {
+    profile
+        .get("organization")?
+        .get("rate_limit_tier")?
+        .as_str()
+        .filter(|t| known_tier(t).is_none())
 }
 
 /// Pay-as-you-go overage, present only when the account has it switched on. Amounts are the
@@ -498,11 +516,15 @@ mod tests {
         let tier = |t: &str| json!({"organization": {"rate_limit_tier": t, "organization_type": "claude_max"}});
         assert_eq!(
             plan_label(&tier("default_claude_max_5x")).as_deref(),
-            Some("Max 5x")
+            Some("Max")
         );
         assert_eq!(
             plan_label(&tier("default_claude_max_20x")).as_deref(),
-            Some("Max 20x")
+            Some("Ultra")
+        );
+        assert_eq!(
+            plan_label(&tier("default_claude_ultra")).as_deref(),
+            Some("Ultra")
         );
         assert_eq!(
             plan_label(&tier("default_claude_pro")).as_deref(),
@@ -515,6 +537,31 @@ mod tests {
         let no_tier = json!({"organization": {"organization_type": "claude_pro"}});
         assert_eq!(plan_label(&no_tier).as_deref(), Some("Claude Pro"));
         assert_eq!(plan_label(&json!({"account": {}})), None);
+    }
+
+    #[test]
+    fn unknown_tier_reports_only_unmapped_strings() {
+        let tier = |t: &str| json!({"organization": {"rate_limit_tier": t}});
+        assert_eq!(unknown_tier(&tier("default_claude_max_20x")), None);
+        assert_eq!(unknown_tier(&tier("default_claude_pro")), None);
+        let ultra = tier("default_claude_ultra");
+        assert_eq!(unknown_tier(&ultra), Some("default_claude_ultra"));
+        assert_eq!(unknown_tier(&json!({"organization": {}})), None);
+    }
+
+    #[test]
+    fn normalize_ultra_response_has_no_session() {
+        let v = json!({
+            "five_hour": null,
+            "seven_day": {"utilization": 30.0, "resets_at": "2026-09-11T20:59:59.966479+00:00"},
+            "limits": [
+                {"kind": "weekly_all", "percent": 30, "resets_at": "2026-09-11T20:59:59.966479+00:00", "scope": null},
+                {"kind": "weekly_scoped", "percent": 5, "resets_at": "2026-09-11T20:59:59.966479+00:00",
+                 "scope": {"model": {"display_name": "Fable"}}}
+            ]
+        });
+        let keys: Vec<String> = normalize(&v).into_iter().map(|q| q.key).collect();
+        assert_eq!(keys, vec!["weekly", "weekly:fable"]);
     }
 
     #[test]

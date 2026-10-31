@@ -65,7 +65,8 @@ The app has no main window. It lives in the menu bar / tray:
 ### Menu bar (macOS)
 
 Format: `◷ 48% ↻2h13m  ·  ▦ 64% ↻3d4h` — session · weekly, each with the percentage used and
-the time until it resets. Other things you may see:
+the time until it resets. The session half appears only when your plan has a 5-hour window:
+verified Ultra accounts have none, so they see `▦ 64% ↻3d4h` alone. Other things you may see:
 
 | Text | Meaning |
 |---|---|
@@ -80,7 +81,8 @@ the time until it resets. Other things you may see:
 The tray shows no text, so the icon carries the numbers. Hover it for the same text macOS
 shows in the menu bar.
 
-- **Top bar** — session quota; **bottom bar** — weekly quota.
+- **Top bar** — session quota; **bottom bar** — weekly quota. Without a 5-hour window
+  (verified Ultra) the icon draws one centred weekly bar.
 - **Green** while usage is behind the clock, **amber** from 80 %, **red** when usage is ahead
   of the clock or the quota is full.
 - **Red frame** — an alert level was reached.
@@ -89,7 +91,7 @@ shows in the menu bar.
 
 ### Popover
 
-A line at the top names your plan (`Claude · Max 5x`), read once per login. Below it, one card
+A line at the top names your plan (`Claude · Max`, `Claude · Ultra`), read once per login. Below it, one card
 per quota (session, weekly, and any per-model weekly quota the API reports) with the percentage
 used, a bar, the reset countdown and clock time. Overlays on the bar:
 
@@ -159,7 +161,7 @@ Everything is in the right-click menu and persists across restarts:
 
 | Menu | Options |
 |---|---|
-| **Menu bar** (macOS) / **Tray** (Windows) | Session · Weekly · Glyphs (`◷` / `▦`) · Percent · Remaining time. At least one quota and one of Percent/Remaining stay on. On Windows, Session/Weekly also hide the matching bar in the icon; the other three shape the tooltip. |
+| **Menu bar** (macOS) / **Tray** (Windows) | Session · Weekly · Glyphs (`◷` / `▦`) · Percent · Remaining time. At least one quota and one of Percent/Remaining stay on. A quota your plan does not have (the session on verified Ultra) is not shown; if it is the only one switched on, the other shows instead. On Windows, Session/Weekly also hide the matching bar in the icon; the other three shape the tooltip. |
 | **Popover** | Time ticks · Elapsed marker · Threshold marks · History line · Pace forecast · Colored percentage |
 | **Alerts** | Session · Weekly (on/off) · Notify on reset · Run-out forecast · **Session levels** `80/95` · `50/80/95` · `90/95` · **Weekly levels** `95` · `80/95` · `90` · **Send test notification** |
 | **Check every** | 3 · 5 · 10 · 15 minutes (the API rate-limits below 2 minutes, so that is the floor) |
